@@ -51,4 +51,121 @@ struct DPTable
  * \brief The DynamicProgramming class
  */
 // -----------------------------------------------------------------------------------
-cl
+class DynamicProgramming
+// -----------------------------------------------------------------------------------
+{
+public:
+    DynamicProgramming() {}
+    explicit DynamicProgramming(const uint16_t max_number_labels);
+    virtual ~DynamicProgramming() {}
+
+    virtual std::vector<label> Minimize(const std::shared_ptr<DPTable>& dp_table,
+                                        FLOAT_TYPE &min_cost) = 0;
+
+protected:
+    std::vector<std::vector<label> > prev_states;
+};
+
+
+/*!
+ * \brief The OpenChainDPTable struct
+ */
+// -----------------------------------------------------------------------------------
+struct OpenChainDPTable : public DPTable
+// -----------------------------------------------------------------------------------
+{
+    OpenChainDPTable(const uint16_t max_number_labels, const uint16_t number_nodes);
+    void Initialize() override;
+};
+
+/*!
+ * \brief The ClosedChainDPTable struct
+ */
+// -----------------------------------------------------------------------------------
+struct ClosedChainDPTable : public DPTable
+// -----------------------------------------------------------------------------------
+{
+    ClosedChainDPTable(const uint16_t max_number_labels, const uint16_t number_nodes);
+    void Initialize() override;
+};
+
+/*!
+ * \brief The StarDPTable struct
+ */
+// -----------------------------------------------------------------------------------
+struct StarDPTable : public DPTable
+// -----------------------------------------------------------------------------------
+{
+    StarDPTable(const uint16_t max_number_labels, const uint16_t number_nodes /*! Including root node */);
+    void Initialize() override;
+};
+
+/*!
+ * \brief The TreeDPTable struct
+ */
+// -----------------------------------------------------------------------------------
+struct TreeDPTable : public DPTable
+// -----------------------------------------------------------------------------------
+{
+    DPTableStarPairwises children_pairwises;
+    DPTableStarUnaries children_unaries;
+
+    std::vector<uint16_t> parent_of_children;
+
+    TreeDPTable(const uint16_t max_number_labels, const uint16_t number_root_children);
+
+    void Initialize() override;
+
+    void AddStarChild(const uint16_t children_of, const uint16_t number_nodes);
+
+protected:
+    uint16_t number_root_children;
+};
+
+
+/*!
+ * \brief The Chain DynamicProgramming class
+ */
+// -----------------------------------------------------------------------------------
+class ChainDP : public DynamicProgramming
+// -----------------------------------------------------------------------------------
+{
+public:
+    // -------------------------------------------------------------------------------
+    virtual std::vector<label> Minimize(const std::shared_ptr<DPTable> &dp_table,
+                                        FLOAT_TYPE &min_cost)  override;
+    // -------------------------------------------------------------------------------
+};
+
+/*!
+ * \brief The Closed Chain DynamicProgramming class
+ */
+// -----------------------------------------------------------------------------------
+class ClosedChainDP : public DynamicProgramming
+// -----------------------------------------------------------------------------------
+{
+public:
+    // -------------------------------------------------------------------------------
+    virtual std::vector<label> Minimize(const std::shared_ptr<DPTable> &dp_table,
+                                         FLOAT_TYPE &min_cost) override;
+    // -------------------------------------------------------------------------------
+};
+
+/*!
+* \brief The Closed Chain DynamicProgramming class
+*/
+// -----------------------------------------------------------------------------------
+class ClosedChainDP1 : public DynamicProgramming
+// -----------------------------------------------------------------------------------
+{
+public:
+    // -------------------------------------------------------------------------------
+    virtual std::vector<label> Minimize(const std::shared_ptr<DPTable> &dp_table,
+                                        FLOAT_TYPE &min_cost) override;
+    // -------------------------------------------------------------------------------
+};
+
+
+/*!
+* \brief The Closed Chain DynamicProgramming class on GPU
+*/
