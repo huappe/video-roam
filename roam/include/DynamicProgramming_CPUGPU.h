@@ -169,3 +169,44 @@ public:
 /*!
 * \brief The Closed Chain DynamicProgramming class on GPU
 */
+// -----------------------------------------------------------------------------------
+class ClosedChainDPCuda : public DynamicProgramming
+// -----------------------------------------------------------------------------------
+{
+public:
+    // -------------------------------------------------------------------------------
+    virtual std::vector<label> Minimize(const std::shared_ptr<DPTable> &dp_table,
+                                        FLOAT_TYPE &min_cost) override;
+    // -------------------------------------------------------------------------------
+};
+
+/*!
+ * \brief The Star DynamicProgramming class
+ */
+// -----------------------------------------------------------------------------------
+class StarDP : DynamicProgramming
+// -----------------------------------------------------------------------------------
+{
+public:
+    // -------------------------------------------------------------------------------
+    virtual std::vector<label> Minimize(const std::shared_ptr<DPTable> &dp_table,
+                                        FLOAT_TYPE &min_cost) override;
+    // -------------------------------------------------------------------------------
+};
+
+/*!
+ * \brief The Tree DynamicProgramming class
+ */
+// -----------------------------------------------------------------------------------
+class TreeDP : DynamicProgramming
+// -----------------------------------------------------------------------------------
+{
+public:
+    // -------------------------------------------------------------------------------
+    virtual std::vector<label> Minimize(const std::shared_ptr<DPTable> &dp_table,
+                                        FLOAT_TYPE &min_cost) override;
+    // -------------------------------------------------------------------------------
+};
+
+
+}
