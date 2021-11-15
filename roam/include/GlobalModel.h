@@ -54,4 +54,17 @@ public:
     bool Update(const cv::Mat &data, const cv::Mat &labels);
 
     cv::Mat ComputeLikelihood(const cv::Mat &data) const;
-    void ComputeLikelihood(const cv::Mat &data, cv::Mat &fg_likelihood, cv::
+    void ComputeLikelihood(const cv::Mat &data, cv::Mat &fg_likelihood, cv::Mat &bg_likelihood) const;
+    cv::Vec2f ComputeLikelihood(const cv::Vec3b &color) const;
+
+    bool initialized;
+
+private:
+    cv::Mat data;
+    cv::Mat label;
+    GMMModel foreground_model;
+    GMMModel background_model;
+    GlobalModel::Params params;
+};
+
+}// namespace roam
