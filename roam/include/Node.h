@@ -67,4 +67,80 @@ public:
         unsigned int label_space_side;
     };
 
-    explicit Node(const cv::Point coo
+    explicit Node(const cv::Point coordinates, const Node::Params& parameters = Node::Params());
+
+    void SetCoordinates(const label l);
+    void SetCoordinates(const cv::Point coordinates);
+    cv::Point GetCoordinates() const;
+
+    void AddUnaryTerm(const cv::Ptr<UnaryTerm>& unary_term);
+    void SetUnary(cv::Ptr<UnaryTerm> unary_term, const size_t index=0);
+    cv::Ptr<UnaryTerm> &GetUnary(const size_t index=0);
+    void ClearUnaryTerms();
+
+    void AddPairwiseTerm(const cv::Ptr<PairwiseTerm>& pairwise_term);
+    void ClearPairwiseTerms();
+
+    /*!
+     * \brief GetTotalUnaryCost returns the sum of all active unary costs for this node
+     * \param coordinates of the point possible move
+     * \return
+     */
+    FLOAT_TYPE GetTotalUnaryCost(const cv::Point coordinates) const;
+
+    /*!
+     * \brief GetTotalPairwiseCost returns the sum of all the active pairwise costs for this node
+     * \param coordinates_a
+     * \param coordinates_b
+     * \return
+     */
+    FLOAT_TYPE GetTotalPairwiseCost(const cv::Point coordinates_a, const cv::Point coordinates_b) const;
+
+
+    /*!
+     * \brief GetTotalUnaryCost returns the total unary cost for this node given a label
+     * \param label
+     * \return
+     */
+    FLOAT_TYPE GetTotalUnaryCost(const label l) const;
+
+    /*!
+     * \brief GetTotalPairwiseCost returns the total unary cost for this node given pair of labels
+     * \param label_a
+     * \param label_b
+     * \param node_b is also needed here to be able to search in its own label_space
+     * \return
+     */
+    FLOAT_TYPE GetTotalPairwiseCost(const label label_a, const label label_b, const Node& node_b) const;
+
+
+    size_t GetPairwiseTermsSize() const;
+    size_t GetUnaryTermsSize() const;
+
+    /*!
+     * \brief ComputePairwiseCostsCuda
+     * \param node_b
+     */
+    void ComputePairwiseCostsCuda(const Node& node_b);
+
+    /*!
+     * \brief GetLabelSpaceSize
+     * \return
+     */
+    unsigned int GetLabelSpaceSize() const;
+
+public:
+    std::vector< cv::Ptr<UnaryTerm> > unary_terms;
+    std::vector< cv::Ptr<PairwiseTerm> > pairwise_terms;
+    bool remove;
+    cv::Point getDisplacedPointFromLabel(const label l) const;
+
+protected:
+    LabelSpace label_space;
+    Params params;
+    cv::Point node_coordinates;
+    std::vector<FLOAT_TYPE> pairwise_costs;
+};
+
+
+}// namespace roam
