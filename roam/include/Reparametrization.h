@@ -60,3 +60,17 @@ struct ProposalsBox
 
 std::vector<cv::Point> ContourFromMask(const cv::Mat &mask, const int type_simplification=CV_CHAIN_APPROX_NONE);
 
+std::vector< std::vector<cv::Point> > ComponentsFromMask(const cv::Mat &mask, const int type_simplification=CV_CHAIN_APPROX_NONE);
+
+bool getDifferences(const cv::Mat &gcut_dst_tf, const cv::Mat &contour_dst_tf,
+                    const std::vector<cv::Point> &contour, const std::vector<cv::Point> &blob,
+                    std::set<size_t> &to_remove, std::vector<cv::Point> &to_add, size_t &min_id, size_t &max_id);
+
+std::vector<cv::Mat> findDifferences(const cv::Mat &gc_segmented, const std::vector<cv::Point> &gc_contour,
+                     const cv::Mat &gc_largest_blob,
+                     const std::vector<cv::Point> &curr_contour, const cv::Mat &curr_mask,
+                     std::vector<ProposalsBox> &all_proposals);
+
+size_t addedNodesKeepTrack(const int prev_node, std::list<bool>& added);
+
+}
