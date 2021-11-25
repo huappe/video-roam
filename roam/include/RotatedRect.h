@@ -132,4 +132,61 @@ public:
      * \param distances_line_cd
      */
     void BuildDistanceAndColorVectors(const cv::Mat& reference_image, std::vector<cv::Vec3f>& colors,
-                                      std::vector<FLOAT_TYPE>& d
+                                      std::vector<FLOAT_TYPE>& distances_line_cd,
+                                      std::vector<cv::Point> &points, bool build_points = false) const;
+
+
+    /*!
+     * \brief BuildDistanceAndColorVectors
+     * \param reference_image
+     * \param valid_mask should be == to mask_label (mask of same size of ref_img).
+     * \param colors
+     * \param distances_line_cd
+     */
+    void BuildDistanceAndColorVectors(const cv::Mat& reference_image, const cv::Mat& valid_mask, const unsigned char mask_label,
+                                      std::vector<cv::Vec3f> &colors, std::vector<FLOAT_TYPE>& distances_line_cd,
+                                      std::vector<cv::Point> &points,
+                                      bool build_points = false) const;
+
+    /*!
+     * \brief BuildDistanceAndColorVectors_2
+     * \param reference_image
+     * \param colors
+     * \param distances_line_cd
+     * \param points
+     * \param build_points
+     */
+    void BuildDistanceAndColorVectors_2(const cv::Mat& reference_image, std::vector<cv::Vec3f>& colors,
+                                        std::vector<FLOAT_TYPE>& distances_line_cd,
+                                        std::vector<cv::Point> &points, bool build_points = false) const;
+
+    /*!
+     * \brief BuildDistanceAndColorVectors_2
+     * \param reference_image
+     * \param valid_mask
+     * \param mask_label
+     * \param colors
+     * \param distances_line_cd
+     * \param points
+     * \param build_points
+     */
+    void BuildDistanceAndColorVectors_2(const cv::Mat& reference_image, const cv::Mat& valid_mask, const unsigned char mask_label,
+                                       std::vector<cv::Vec3f> &colors, std::vector<FLOAT_TYPE>& distances_line_cd,
+                                       std::vector<cv::Point> &points,
+                                       bool build_points = false) const;
+
+
+private:
+    cv::Point2f pA, pB, pC, pD;
+    Line lAB, lBC, lCD, lDA;
+    bool rect_up;
+    FLOAT_TYPE half_perimeter;
+    bool hack_flash;
+#if defined(_MSC_VER) && (_MSC_VER <= 1800) // fix MSVC partial implementation of constexpr
+    static const FLOAT_TYPE inner_rect_threshold;
+#else
+    static constexpr FLOAT_TYPE inner_rect_threshold = 0.01;
+#endif
+};
+
+}// namespace roam
