@@ -213,4 +213,124 @@ calcNWeights(const cv::Mat& img, cv::Mat& leftW, cv::Mat& upleftW, cv::Mat& upW,
             if(x+1 < img.cols && y-1 >= 0) // upright
             {
                 const cv::Vec3d diff = color - static_cast<cv::Vec3d>(img.at<cv::Vec3b>(y - 1, x + 1));
-                uprightW.at<double>(y,x)
+                uprightW.at<double>(y,x) = gammaDivSqrt2 * exp(-beta*diff.dot(diff));
+            }
+            else
+                uprightW.at<double>(y,x) = 0;
+        }
+}
+
+// ---------------------------------------------------------------------------
+static cv::Mat MaskFromContour(const std::vector<cv::Point> &closed_contour, const cv::Size &sz)
+// ---------------------------------------------------------------------------
+{
+    cv::Mat mask(sz, CV_8UC1, GC_Energy::GCClasses::GC_BGD);
+    cv::Rect im_rect(cv::Point(), sz);
+    cv::Rect disputed_space = cv::minAreaRect(closed_contour).boundingRect();
+    const int margin = 10;
+    disputed_space.x -= margin;
+    disputed_space.y -= margin;
+    disputed_space.width += 2*margin;
+    disputed_space.height += 2*margin;
+    disputed_space &= im_rect;
+
+    mask(disputed_space) = cv::Scalar(GC_Energy::GCClasses::GC_PR_FGD);
+
+    return mask;
+}
+
+// ---------------------------------------------------------------------------
+static cv::Mat LabelsFromMask(const cv::Mat &mask)
+// ---------------------------------------------------------------------------
+{
+    cv::Mat labels(mask.size(), CV_8UC1, cv::Scalar(0));
+
+    #pragma omp parallel for
+    for(auto y = 0; y < mask.rows; ++y)
+        for(auto x = 0; x < mask.cols; ++x)
+        {
+            const auto &val = mask.at<uchar>(y, x);
+            if (val == GC_Energy::GCClasses::GC_PR_FGD || val == GC_Energy::GCClasses::GC_FGD)
+                labels.at<uchar>(y,x) = 255;
+        }
+
+    return labels;
+}
+
+// ---------------------------------------------------------------------------
+cv::Mat GC_Energy::Segment(const cv::Mat &image_, const cv::Mat &labels_,
+                                      const std::vector<cv::Point> &closed_contour,
+                                      const cv::Mat &precomputed_contour_likelihood_,
+                                      const GlobalModel &global_model, const cv::Rect& slack)
+// ---------------------------------------------------------------------------
+{
+    cv::Mat image, labels, precomputed_contour_likelihood;
+
+    if (slack==cv::Rect())
+    {
+        image = image_;
+        labels = labels_;
+        precomputed_contour_likelihood = precomputed_contour_likelihood_;
+    }
+    else
+    {
+        image = image_(slack);
+        labels = labels_(slack);
+        precomputed_contour_likelihood = precomputed_contour_likelihood_(slack);
+    }
+
+
+    if (global_model.initialized)
+        this->model = global_model;
+
+    const cv::Mat &img = image;
+    cv::Mat mask = labels.clone();
+
+
+    if( params.iterations <= 0)
+        return cv::Mat();
+
+    const double gamma = this->params.gamma_gc;
+    const double lambda = this->params.lambda_gc;
+    const double beta = calcBeta( img );
+
+    cv::Mat leftW, upleftW, upW, uprightW;
+    calcNWeights( img, leftW, upleftW, upW, uprightW, beta, gamma );
+
+
+    cv::Mat mask_labels( mask.size(), CV_8UC1, cv::Scalar(cv::GC_PR_BGD) );
+    cv::Mat tr_mask = (mask/255)*cv::GC_PR_FGD;
+    tr_mask.copyTo(mask_labels, mask);
+
+    for(unsigned int i = 0; i < this->params.iterations; ++i )
+    {
+        int vtxCount = img.cols*img.rows,
+            edgeCount = 2*(4*img.cols*img.rows - 3*(img.cols + img.rows) + 2);
+        //GraphType *graph = new GraphType(vtxCount, edgeCount);
+        std::shared_ptr<GraphType> graph = std::make_shared<GraphType>(vtxCount, edgeCount);
+
+        if (!is_initialized && !model.initialized)
+            this->initialize( img, LabelsFromMask(mask_labels) );
+        else if(i>0)
+            this->update( img, LabelsFromMask(mask_labels) );
+
+
+        construct8Graph(img, mask_labels, model, lambda, leftW, upleftW, upW, uprightW, graph, precomputed_contour_likelihood );
+        estimateSegmentation( graph, mask_labels );
+
+        //delete graph;
+    }
+    this->is_initialized = true;
+
+    mask = LabelsFromMask(mask_labels);
+
+    if (slack==cv::Rect())
+        return mask;
+    else
+    {
+        labels = cv::Mat::zeros(image_.size(), CV_8UC1);
+        mask.copyTo(labels(slack));
+
+        return labels;
+    }
+}
