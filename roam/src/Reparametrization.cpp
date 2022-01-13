@@ -473,4 +473,69 @@ std::vector<cv::Mat> findDifferences(const cv::Mat &gc_segmented,
 
             ProposalsBox &tmp_proposal = tmp_proposals[i];
             valid[i] = ROAM::getDifferences(proposals.dst_g_c, proposals.dst_c_g, curr_contour, blob, 
-                  
+                                      tmp_proposal.remove_nodes, tmp_proposal.add_nodes, tmp_proposal.min_max_ids.first, tmp_proposal.min_max_ids.second);
+
+            tmp_proposal.mass = tmp_proposal.remove_nodes.size();
+        }
+
+        for(size_t i = 0; i < proposals.blobs_c_g.size(); ++i)
+            if(valid[i])
+            {
+                all_proposals.push_back(tmp_proposals[i]);
+                if(tmp_proposals[i].min_max_ids.first > 10000)
+                    throw;
+            }
+
+    }
+
+// TODO: I think we haven't used the holes, so I'm commenting this out
+#if 0
+    // holes
+    for(size_t i = 0; i < proposals.blobs_holes.size(); ++i)
+    {
+        const std::vector<cv::Point> &blob = proposals.blobs_holes[i];
+
+        cv::Mat blob_contour = cv::Mat::zeros(gc_segmented.rows, gc_segmented.cols, CV_8UC1);
+
+        std::vector<std::vector<cv::Point> > all_changes;
+        cv::connectedComponents(blob_contour, all_changes);
+
+        for(size_t idx = 0; idx < all_changes.size(); ++idx)
+        {
+            const std::vector<cv::Point> &line = all_changes[idx];
+
+            if(line.size() < 2)
+                continue;
+
+            std::vector<cv::Point> approx;
+            cv::approxPolyDP(line, approx, 0.05, false);
+
+            if(approx.size() < 2)
+                continue;
+
+            proposals.contour_holes.push_back(approx);
+        }
+
+    }
+#endif
+
+return outputs;
+}
+
+// -----------------------------------------------------------------------------------
+size_t addedNodesKeepTrack(const int prev_node, std::list<bool>& added)
+// -----------------------------------------------------------------------------------
+{
+    if(prev_node < 0)
+    {
+        added.push_back(true);
+        return added.size();
+    }
+    else
+    {
+        added.insert(std::next(added.begin(), prev_node + 1), true);
+        return prev_node + 1;
+    }
+}
+
+}
