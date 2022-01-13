@@ -241,4 +241,115 @@ bool getDifferences(const cv::Mat &gcut_dst_tf, const cv::Mat &contour_dst_tf,
             std::vector<size_t> tmp_proposed_to_remove;
             FLOAT_TYPE curr_dst;
             if(pos_tf_dst < neg_tf_dst)
-         
+            {
+                tmp_proposed_to_add = pos_path;
+                tmp_proposed_to_remove = neg_path;
+                curr_dst = pos_curr_dst;
+            }
+            else
+            {
+                tmp_proposed_to_add = neg_path;
+                tmp_proposed_to_remove = pos_path;
+                curr_dst = neg_curr_dst;
+            }
+
+            const FLOAT_TYPE new_curr_dst = static_cast<float>(cv::norm(tmp_a - tmp_b));
+            if(new_curr_dst >= new_max_dst)
+            {
+                new_a = tmp_a;
+                new_b = tmp_b;
+
+                proposed_to_add = tmp_proposed_to_add;
+                proposed_to_remove = tmp_proposed_to_remove;
+
+                new_max_dst = new_curr_dst;
+            }
+        }
+
+    for(std::vector<size_t>::const_iterator it = proposed_to_add.begin(); it != proposed_to_add.end(); ++it)
+        if(contour_dst_tf.at<float>(contours[0][*it]) > 5.0)
+            to_add.push_back(contours[0][*it]);
+
+    const size_t id_a = findClosestNode(contour, new_a, to_add);
+    const size_t id_b = findClosestNode(contour, new_b, to_add);
+
+    to_remove.insert(id_a);
+    to_remove.insert(id_b);
+
+    for(std::vector<size_t>::const_iterator it = proposed_to_remove.begin(); it != proposed_to_remove.end(); ++it)
+    {
+        const size_t id = findClosestNode(contour, contours[0][*it]);
+        const FLOAT_TYPE dst = static_cast<float>(cv::norm(contours[0][*it] - contour[id]));
+        if(dst < max_Node_dst_tf)
+            to_remove.insert(id);
+    }
+
+    if(to_remove.empty())
+        return false;
+
+    // add (potentially) missing/not detected points
+    const int set_min_id = static_cast<int>(*(to_remove.begin()));
+    const int set_max_id = static_cast<int>(*(to_remove.rbegin()));
+
+    // TODO: be careful with id close to 0
+    for(int id = set_min_id + 1; id < set_max_id - 1; ++id)
+        to_remove.insert(id);
+
+    min_id = std::max(int(*std::min_element(to_remove.begin(), to_remove.end())) - 1, 0);
+    max_id = *std::max_element(to_remove.begin(), to_remove.end());
+
+    return true;
+}
+
+// -----------------------------------------------------------------------------------
+std::vector<cv::Mat> findDifferences(const cv::Mat &gc_segmented, 
+                                     const std::vector<cv::Point> &gc_contour, 
+                                     const cv::Mat &gc_largest_blob,
+                                     const std::vector<cv::Point> &curr_contour, 
+                                     const cv::Mat &curr_mask,
+                                     std::vector<ProposalsBox> &all_proposals)
+// -----------------------------------------------------------------------------------
+{
+
+    ROAM::Timer timer;
+    timer.Start();
+
+    std::vector<cv::Mat> outputs;
+
+    // Find residuals (Holes and Missing parts)
+    const cv::Mat gcut_contour = gc_largest_blob - curr_mask;
+    const cv::Mat contour_gcut = curr_mask - gc_largest_blob;
+
+    // ProposalBlobs
+    ROAM::ProposalsBlobs proposals;
+
+    // repar_holes filter out
+    {
+        // distance TF of contour
+        cv::Mat boundary = cv::Mat::zeros(gc_segmented.rows, gc_segmented.cols, CV_8UC1);
+        cv::polylines(boundary, curr_contour, true, cv::Scalar(255, 255, 255));
+        cv::distanceTransform(255 - boundary, proposals.dst_c_g, CV_DIST_L2, 3);
+
+        std::vector<std::vector<cv::Point> > tmp_blobs = ComponentsFromMask(contour_gcut);
+
+        for(size_t i = 0; i < tmp_blobs.size(); ++i)
+        {
+            const std::vector<cv::Point> &blob = tmp_blobs[i];
+
+            FLOAT_TYPE min_val = std::numeric_limits<FLOAT_TYPE>::infinity();
+            FLOAT_TYPE max_val = 0.0;
+            for(size_t j = 0; j < blob.size(); ++j)
+            {
+                const cv::Point2i &pt = blob[j];
+                min_val = std::min(min_val, proposals.dst_c_g.at<float>(pt));
+                max_val = std::max(max_val, proposals.dst_c_g.at<float>(pt));
+                if(!(min_val > 1.0) && max_val > 2.0)
+                    break;
+            }
+
+            if(max_val > 2.0 && min_val > 1.0)
+                proposals.blobs_holes.push_back(blob);
+            else if(max_val > 2.0)
+                proposals.blobs_c_g.push_back(blob);
+
+        
