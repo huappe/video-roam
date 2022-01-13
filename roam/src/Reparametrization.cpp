@@ -134,4 +134,111 @@ FLOAT_TYPE computePixelDistance(const std::vector<cv::Point> &proposed_contour,
 
                 if(pos)
                 {
-              
+                    path.clear();
+                    path.reserve(max_id - min_id);
+
+                    for(size_t i = min_id; i < max_id; ++i)
+                        if(!(std::find(added.begin(), added.end(), i) != added.end()))
+                        {
+                            path.push_back(i);
+                            added.insert(i);    // is this just to remove potential duplicates?
+                        }
+                }
+                else
+                {
+                    path.clear();
+                    path.reserve(proposed_contour.size() - max_id + min_id);
+
+                    for(size_t i = max_id; i < proposed_contour.size(); ++i)
+                        if(!(std::find(added.begin(), added.end(), i) != added.end()))
+                        {
+                            path.push_back(i);
+                            added.insert(i);
+                        }
+
+                    for(size_t i = 0; i < min_id; ++i)
+                        if(!(std::find(added.begin(), added.end(), i) != added.end()))
+                        {
+                            path.push_back(i);
+                            added.insert(i);
+                        }
+                }
+            }
+        }
+
+    return distance;
+}
+
+// -----------------------------------------------------------------------------------
+bool getDifferences(const cv::Mat &gcut_dst_tf, const cv::Mat &contour_dst_tf,
+                    const std::vector<cv::Point> &contour, const std::vector<cv::Point> &blob,
+                    std::set<size_t> &to_remove, std::vector<cv::Point> &to_add, size_t &min_id, size_t &max_id)
+// -----------------------------------------------------------------------------------
+{
+    ROAM::Timer timer;
+    timer.Start();
+
+    const FLOAT_TYPE max_dst_tf = 1.0;
+    const FLOAT_TYPE max_Node_dst_tf = 2.0;
+
+    // add nodes - let's swap it with finding of endpoints
+    cv::Mat tst = cv::Mat::zeros(gcut_dst_tf.size(), CV_8UC1);
+    #pragma omp parallel for
+    for(auto j = 0; j < blob.size(); ++j)
+        tst.at<uchar>(blob[j]) = 255; // TODO: change to pointer?
+
+    std::vector<std::vector<cv::Point> > contours;
+    cv::findContours(tst, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_NONE);
+
+    std::sort(contours.begin(), contours.end(), [](std::vector<cv::Point> const& a, std::vector<cv::Point> const& b) { return a.size() > b.size(); });
+
+    if(contours.size() == 0)
+        return false;
+
+    std::vector<cv::Point> new_i_points;
+
+    // find points close to endpoints
+    for(size_t j = 0; j < contours[0].size(); ++j)
+        if(contour_dst_tf.at<float>(contours[0][j]) < max_dst_tf && gcut_dst_tf.at<float>(contours[0][j]) < max_dst_tf)
+            new_i_points.push_back(contours[0][j]);
+
+    if(new_i_points.size() == 0)
+        return false;
+
+    cv::Point new_a = new_i_points[0];
+    cv::Point new_b = new_i_points[0];
+
+    std::vector<size_t> proposed_to_add;
+    std::vector<size_t> proposed_to_remove;
+
+    FLOAT_TYPE new_max_dst = 0;
+
+    // find the correct endpoints
+    for(size_t j = 0; j < new_i_points.size(); ++j)
+        for(size_t k = j; k < new_i_points.size(); ++k)
+        {
+            const cv::Point &tmp_a = new_i_points[j];
+            const cv::Point &tmp_b = new_i_points[k];
+
+            // extract segments
+            std::vector<size_t> pos_path;
+            const FLOAT_TYPE pos_curr_dst = computePixelDistance(contours[0], tmp_a, tmp_b, true, pos_path);
+
+            std::vector<size_t> neg_path;
+            const FLOAT_TYPE neg_curr_dst = computePixelDistance(contours[0], tmp_a, tmp_b, false, neg_path);
+
+            // determine how far they are from the proposed contour
+            FLOAT_TYPE pos_tf_dst = 0.0;
+            for(std::vector<size_t>::const_iterator it = pos_path.begin(); it != pos_path.end(); ++it)
+                pos_tf_dst += gcut_dst_tf.at<float>(contours[0][*it]);
+
+            FLOAT_TYPE neg_tf_dst = 0.0;
+            for(std::vector<size_t>::const_iterator it = neg_path.begin(); it != neg_path.end(); ++it)
+                neg_tf_dst += gcut_dst_tf.at<float>(contours[0][*it]);
+
+            // determine which one is proposed
+            std::vector<size_t> tmp_proposed_to_add;
+            std::vector<size_t> tmp_proposed_to_remove;
+            FLOAT_TYPE curr_dst;
+            if(pos_tf_dst < neg_tf_dst)
+         
