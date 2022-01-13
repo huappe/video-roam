@@ -136,4 +136,86 @@ void Node::ClearUnaryTerms()
 
 // -----------------------------------------------------------------------------------
 void Node::AddPairwiseTerm(const cv::Ptr<PairwiseTerm> &pairwise_term)
-// ---------------------------------------------------------
+// -----------------------------------------------------------------------------------
+{
+    pairwise_terms.push_back(pairwise_term);
+}
+
+// -----------------------------------------------------------------------------------
+void Node::ClearPairwiseTerms()
+// -----------------------------------------------------------------------------------
+{
+    pairwise_terms.clear();
+}
+
+// -----------------------------------------------------------------------------------
+FLOAT_TYPE Node::GetTotalPairwiseCost(const cv::Point coordinates_a, const cv::Point coordinates_b) const
+// -----------------------------------------------------------------------------------
+{
+    FLOAT_TYPE acum = 0.0;
+
+    for (uint pairwise_index = 0; pairwise_index < pairwise_terms.size(); ++pairwise_index)
+        acum += pairwise_terms[pairwise_index]->GetCost(coordinates_a, coordinates_b) * pairwise_terms[pairwise_index]->GetWeight();
+
+    return acum;
+}
+
+// -----------------------------------------------------------------------------------
+FLOAT_TYPE Node::GetTotalUnaryCost(const cv::Point coordinates) const
+// -----------------------------------------------------------------------------------
+{
+    FLOAT_TYPE acum = 0.0;
+
+    for(uint unary_index = 0; unary_index < unary_terms.size(); ++unary_index)
+        acum += unary_terms[unary_index]->GetCost(coordinates) * unary_terms[unary_index]->GetWeight();
+
+    return acum;
+}
+
+// -----------------------------------------------------------------------------------
+unsigned int Node::GetLabelSpaceSize() const
+// -----------------------------------------------------------------------------------
+{
+    return label_space.GetNumLabels();
+}
+
+// -----------------------------------------------------------------------------------
+FLOAT_TYPE Node::GetTotalUnaryCost(const label l) const
+// -----------------------------------------------------------------------------------
+{
+    return GetTotalUnaryCost(this->getDisplacedPointFromLabel(l));
+}
+
+// -----------------------------------------------------------------------------------
+FLOAT_TYPE Node::GetTotalPairwiseCost(const label label_a, const label label_b, const Node &node_b) const
+// -----------------------------------------------------------------------------------
+{
+    if (pairwise_costs.size() > 0)
+        return pairwise_costs[label_a*node_b.GetLabelSpaceSize() + label_b];
+    else
+        return GetTotalPairwiseCost(this->getDisplacedPointFromLabel(label_a),
+                                node_b.getDisplacedPointFromLabel(label_b));
+}
+
+// -----------------------------------------------------------------------------------
+size_t Node::GetPairwiseTermsSize() const
+// -----------------------------------------------------------------------------------
+{
+    return pairwise_terms.size();
+}
+
+// -----------------------------------------------------------------------------------
+size_t Node::GetUnaryTermsSize() const
+// -----------------------------------------------------------------------------------
+{
+    return unary_terms.size();
+}
+
+// -----------------------------------------------------------------------------------
+cv::Point Node::getDisplacedPointFromLabel(const ROAM::label l) const
+// -----------------------------------------------------------------------------------
+{
+    return this->node_coordinates + label_space.GetDisplacementsFromLabel(l);
+}
+
+
