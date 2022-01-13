@@ -352,4 +352,125 @@ std::vector<cv::Mat> findDifferences(const cv::Mat &gc_segmented,
             else if(max_val > 2.0)
                 proposals.blobs_c_g.push_back(blob);
 
-        
+        }
+    }
+
+    // missing_parts filter out
+    {
+        cv::Mat boundary = cv::Mat::zeros(gc_segmented.rows, gc_segmented.cols, CV_8UC1);
+        cv::polylines(boundary, gc_contour, true, cv::Scalar(255, 255, 255));
+        cv::distanceTransform(255 - boundary, proposals.dst_g_c, CV_DIST_L2, 3);
+
+        std::vector<std::vector<cv::Point> > tmp_blobs = ComponentsFromMask(gcut_contour);
+
+        for(size_t i = 0; i < tmp_blobs.size(); ++i)
+        {
+            const std::vector<cv::Point2i> &blob = tmp_blobs[i];
+            bool valid = false;
+            for(size_t j = 0; j < blob.size(); ++j)
+            {
+                const cv::Point2i &pt = blob[j];
+                if(proposals.dst_g_c.at<float>(pt) > 2.0)
+                {
+                    valid = true;
+                    break;
+                }
+            }
+
+            if(valid)
+                proposals.blobs_g_c.push_back(blob);
+        }
+    }
+
+    // g - c
+    #if 0
+    for(size_t i = 0; i < proposals.blobs_g_c.size(); ++i)
+    {
+        const std::vector<cv::Point> &blob = proposals.blobs_g_c[i];
+
+        std::set<size_t> to_remove;
+        std::vector<cv::Point> to_add;
+        size_t min_id, max_id;
+        const bool valid = getDifferences(proposals.dst_g_c, proposals.dst_c_g, curr_contour, blob, to_remove, to_add, min_id, max_id);
+        if(valid)
+        {
+
+            ROAM::ProposalsBox current_proposal;
+            current_proposal.remove_nodes = to_remove;
+            current_proposal.add_nodes = to_add;
+            current_proposal.min_max_ids = std::pair<size_t, size_t>(min_id, max_id);
+            current_proposal.mass = to_remove.size();
+
+            all_proposals.push_back(current_proposal);
+            if(min_id > 10000)
+            {
+                throw;
+            }
+        }
+    }
+    #endif
+
+    {
+        std::vector<bool> valid(proposals.blobs_g_c.size(), false);
+        std::vector<ProposalsBox> tmp_proposals(proposals.blobs_g_c.size());
+
+        #pragma omp parallel for
+        for(auto i = 0; i < proposals.blobs_g_c.size(); ++i)
+        {
+            const std::vector<cv::Point> &blob = proposals.blobs_g_c[i];
+
+            ProposalsBox &tmp_proposal = tmp_proposals[i];
+            valid[i] = ROAM::getDifferences(proposals.dst_g_c, proposals.dst_c_g, curr_contour, blob, 
+                                      tmp_proposal.remove_nodes, tmp_proposal.add_nodes, tmp_proposal.min_max_ids.first, tmp_proposal.min_max_ids.second);
+            
+            tmp_proposal.mass = tmp_proposal.remove_nodes.size();
+        }
+
+        for(size_t i = 0; i < proposals.blobs_g_c.size(); ++i)
+            if(valid[i])
+            {
+                all_proposals.push_back(tmp_proposals[i]);
+                if(tmp_proposals[i].min_max_ids.first > 10000)
+                    throw;
+            }
+    }
+
+    // c - g
+    #if 0
+    for(size_t i = 0; i < proposals.blobs_c_g.size(); ++i)
+    {
+        const std::vector<cv::Point> &blob = proposals.blobs_c_g[i];
+
+        std::set<size_t> to_remove;
+        std::vector<cv::Point> to_add;
+        size_t min_id, max_id;
+        const bool valid = getDifferences(proposals.dst_g_c, proposals.dst_c_g, curr_contour, blob, to_remove, to_add, min_id, max_id);
+        if(valid)
+        {
+            ProposalsBox current_proposal;
+            current_proposal.remove_nodes = to_remove;
+            current_proposal.add_nodes = to_add;
+            current_proposal.min_max_ids = std::pair<size_t, size_t>(min_id, max_id);
+            current_proposal.mass = to_remove.size();
+
+            all_proposals.push_back(current_proposal);
+            if(min_id > 10000)
+            {
+                throw;
+            }
+        }
+    }
+    #endif
+
+    {
+        std::vector<bool> valid(proposals.blobs_c_g.size(), false);
+        std::vector<ProposalsBox> tmp_proposals(proposals.blobs_c_g.size());
+
+        #pragma omp parallel for
+        for(auto i = 0; i < proposals.blobs_c_g.size(); ++i)
+        {
+            const std::vector<cv::Point> &blob = proposals.blobs_c_g[i];
+
+            ProposalsBox &tmp_proposal = tmp_proposals[i];
+            valid[i] = ROAM::getDifferences(proposals.dst_g_c, proposals.dst_c_g, curr_contour, blob, 
+                  
