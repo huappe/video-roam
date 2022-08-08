@@ -168,4 +168,110 @@ cv::Vec3d RotatedRect::SumOver(const LineIntegralImage &verticalLineIntegralImag
         for(int x = static_cast<int>(pA.x); x<static_cast<int>(pD.x); ++x)
         {
             ups.push_back(cv::Point2f(static_cast<float>(x), lCD.Y(static_cast<float>(x))));
-            dos.push_bac
+            dos.push_back(cv::Point2f(static_cast<float>(x), lDA.Y(static_cast<float>(x))));
+        }
+    }
+
+    if ( this->pC.x<this->pB.x && this->pC.x<this->pA.x && this->pC.x<=this->pD.x  )
+    {
+        // C is leftmost
+        for(int x = static_cast<int>(pC.x); x<static_cast<int>(pB.x); ++x)
+        {
+            ups.push_back(cv::Point2f(static_cast<float>(x), lCD.Y(static_cast<float>(x))));
+            dos.push_back(cv::Point2f(static_cast<float>(x), lBC.Y(static_cast<float>(x))));
+        }
+
+        for(int x = static_cast<int>(pB.x); x<static_cast<int>(pD.x); ++x)
+        {
+            ups.push_back(cv::Point2f(static_cast<float>(x), lCD.Y(static_cast<float>(x))));
+            dos.push_back(cv::Point2f(static_cast<float>(x), lAB.Y(static_cast<float>(x))));
+        }
+
+        for(int x = static_cast<int>(pD.x); x<static_cast<int>(pA.x); ++x)
+        {
+            ups.push_back(cv::Point2f(static_cast<float>(x), lDA.Y(static_cast<float>(x))));
+            dos.push_back(cv::Point2f(static_cast<float>(x), lAB.Y(static_cast<float>(x))));
+        }
+    }
+
+    if ( this->pD.x<this->pB.x && this->pD.x<this->pC.x && this->pD.x<this->pA.x  )
+    {
+        // D is leftmost
+        for(int x = static_cast<int>(pD.x); x < static_cast<int>(pA.x); ++x)
+        {
+            ups.push_back(cv::Point2f(static_cast<float>(x), lDA.Y(static_cast<float>(x))));
+            dos.push_back(cv::Point2f(static_cast<float>(x), lCD.Y(static_cast<float>(x))));
+        }
+
+        for(int x = static_cast<int>(pA.x); x < static_cast<int>(pC.x); ++x)
+        {
+            ups.push_back(cv::Point2f(static_cast<float>(x), lAB.Y(static_cast<float>(x))));
+            dos.push_back(cv::Point2f(static_cast<float>(x), lCD.Y(static_cast<float>(x))));
+        }
+
+        for(int x = static_cast<int>(pC.x); x < static_cast<int>(pB.x); ++x)
+        {
+            ups.push_back(cv::Point2f(static_cast<float>(x), lAB.Y(static_cast<float>(x))));
+            dos.push_back(cv::Point2f(static_cast<float>(x), lBC.Y(static_cast<float>(x))));
+        }
+    }
+
+    // Do the Sum
+    if (verticalLineIntegralImage.type() == CV_32SC3)
+    {
+        cv::Vec3d output(0, 0, 0);
+
+        // TODO: can be parallelized
+        for(auto c=0; c<dos.size(); ++c)
+        {
+            if(std::abs(dos[c].x-ups[c].x) > half_perimeter || std::abs(dos[c].y-ups[c].y) > half_perimeter)
+                continue;
+
+            if(dos[c].x<0 || dos[c].y<0 || dos[c].x >= verticalLineIntegralImage.cols || dos[c].y >= verticalLineIntegralImage.rows)
+                continue;
+
+            if(ups[c].x<0 || ups[c].y<0 || ups[c].x >= verticalLineIntegralImage.cols || ups[c].y >= verticalLineIntegralImage.rows)
+                continue;
+
+            output += ( verticalLineIntegralImage.at<cv::Vec3d>(dos[c]) - verticalLineIntegralImage.at<cv::Vec3d>(ups[c]) );
+        }
+
+        return output;
+    }
+    else
+    if (verticalLineIntegralImage.type()==CV_32SC1)
+    {
+        double output = 0.0;
+
+        #pragma omp parallel for reduction(+:output)
+        for(auto c = 0; c<dos.size(); ++c)
+        {
+            if(std::abs(dos[c].x-ups[c].x) > half_perimeter || std::abs(dos[c].y-ups[c].y) > half_perimeter)
+                continue;
+
+            if(dos[c].x < 0 || dos[c].y < 0 || dos[c].x>=verticalLineIntegralImage.cols || dos[c].y >= verticalLineIntegralImage.rows)
+                continue;
+
+            if(ups[c].x < 0 || ups[c].y < 0 || ups[c].x>=verticalLineIntegralImage.cols || ups[c].y >= verticalLineIntegralImage.rows)
+                continue;
+
+            output += ( verticalLineIntegralImage.at<int>(dos[c]) - verticalLineIntegralImage.at<int>(ups[c]) );
+        }
+        return cv::Vec3d(output, output, output);
+    }
+    else
+    if (verticalLineIntegralImage.type()==CV_64FC1)
+    {
+        double output = 0.0;
+        
+        #pragma omp parallel for reduction(+:output)
+        for(auto c = 0; c < dos.size(); ++c)
+        {
+            if (std::abs(dos[c].x - ups[c].x) > half_perimeter || std::abs(dos[c].y - ups[c].y) > half_perimeter)
+                continue;
+
+            if (dos[c].x < 0 || dos[c].y < 0 || dos[c].x >= verticalLineIntegralImage.cols || dos[c].y >= verticalLineIntegralImage.rows)
+                continue;
+
+            if (ups[c].x < 0 || ups[c].y < 0 || ups[c].x >= verticalLineIntegralImage.cols || ups[c].y >= verticalLineIntegralImage.rows)
+      
