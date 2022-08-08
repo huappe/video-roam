@@ -274,4 +274,108 @@ cv::Vec3d RotatedRect::SumOver(const LineIntegralImage &verticalLineIntegralImag
                 continue;
 
             if (ups[c].x < 0 || ups[c].y < 0 || ups[c].x >= verticalLineIntegralImage.cols || ups[c].y >= verticalLineIntegralImage.rows)
-      
+                continue;
+
+            output += ( verticalLineIntegralImage.at<double>(dos[c]) - verticalLineIntegralImage.at<double>(ups[c]) );
+        }
+
+        return cv::Vec3d(output, output, output);
+    }
+
+    return cv::Vec3d(0.0, 0.0, 0.0);
+}
+
+// -----------------------------------------------------------------------------------
+cv::RotatedRect RotatedRect::GetCVRotatedRect() const
+// -----------------------------------------------------------------------------------
+{
+    const cv::Point2f center = (pA + pB + pC + pD) / 4.f;
+    const FLOAT_TYPE angle = static_cast<FLOAT_TYPE>(std::atan(lCD.M()) * 180.f / CV_PI);
+    const cv::Size2f size(static_cast<float>(cv::norm(pC - pD)), static_cast<float>(cv::norm(pA - pD)));
+    return cv::RotatedRect(center, size, angle);
+}
+
+// -----------------------------------------------------------------------------------
+void RotatedRect::BuildDistanceAndColorVectors(const cv::Mat &reference_image,
+        std::vector<cv::Vec3f> &colors, std::vector<FLOAT_TYPE> &distances_line_cd, std::vector<cv::Point> &points,
+        bool build_points) const
+// -----------------------------------------------------------------------------------
+{
+    const cv::Rect whole_im(0, 0, reference_image.cols, reference_image.rows);
+    const cv::Rect bound_re = this->GetCVRotatedRect().boundingRect();
+
+    const cv::Rect valid_re = whole_im & bound_re;
+
+    colors.clear();
+    distances_line_cd.clear();
+    colors.reserve(static_cast<size_t>(valid_re.area()));
+    distances_line_cd.reserve(static_cast<size_t>(valid_re.area()));
+
+    if (build_points)
+    {
+        points.clear();
+        points.reserve(static_cast<size_t>(valid_re.area()));
+    }
+
+    for (int y = valid_re.y; y < valid_re.y + valid_re.height; ++y)
+    {
+        const cv::Vec3b* ptr_row = reference_image.ptr<cv::Vec3b>(y);
+
+        for (int x = valid_re.x; x < valid_re.x+valid_re.width; ++x)
+        {
+            const FLOAT_TYPE d_cd = std::abs(-lCD.M() * x + y - lCD.B()) / std::sqrt(1+lCD.M() * lCD.M());
+
+            if (!hack_flash)
+            {
+                const FLOAT_TYPE d_ab = std::abs(-lAB.M() * x + y - lAB.B()) / std::sqrt(1 + lAB.M() * lAB.M());
+                const FLOAT_TYPE d_bc = std::abs(-lBC.M() * x + y - lBC.B()) / std::sqrt(1 + lBC.M() * lBC.M());
+                const FLOAT_TYPE d_da = std::abs(-lDA.M() * x + y - lDA.B()) / std::sqrt(1 + lDA.M() * lDA.M());
+
+                if (std::abs((d_ab + d_bc + d_cd + d_da) - half_perimeter ) <= inner_rect_threshold)
+                {
+                    colors.push_back(cv::Vec3f(ptr_row[x][0], ptr_row[x][1], ptr_row[x][2]));
+                    distances_line_cd.push_back(d_cd);
+
+                    if (build_points)
+                        points.push_back(cv::Point(x,y));
+                }
+            }
+            else
+            {
+                colors.push_back(cv::Vec3f(ptr_row[x][0], ptr_row[x][1], ptr_row[x][2]));
+                distances_line_cd.push_back(d_cd);
+
+                if (build_points)
+                    points.push_back( cv::Point(x,y) );
+            }
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------------
+void RotatedRect::BuildDistanceAndColorVectors(const cv::Mat &reference_image, const cv::Mat& valid_mask, const unsigned char mask_label,
+        std::vector<cv::Vec3f> &colors, std::vector<FLOAT_TYPE> &distances_line_cd,
+                                               std::vector<cv::Point> &points, bool build_points) const
+// -----------------------------------------------------------------------------------
+{
+    assert(valid_mask.size()==reference_image.size());
+    assert(valid_mask.type() == CV_8UC1);
+
+    const cv::Rect whole_im(0, 0, reference_image.cols, reference_image.rows);
+    const cv::Rect bound_re = this->GetCVRotatedRect().boundingRect();
+
+    const cv::Rect valid_re = whole_im & bound_re;
+
+    colors.clear();
+    distances_line_cd.clear();
+    colors.reserve(static_cast<size_t>(valid_re.area()));
+    distances_line_cd.reserve(static_cast<size_t>(valid_re.area()));
+
+    if (build_points)
+    {
+        points.clear();
+        points.reserve(static_cast<size_t>(valid_re.area()));
+    }
+
+    for (int y = valid_re.y; y < valid_re.y + valid_re.height; ++y)
+    
