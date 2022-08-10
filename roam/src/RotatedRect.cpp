@@ -489,3 +489,124 @@ void RotatedRect::BuildDistanceAndColorVectors_2(const cv::Mat& reference_image,
                 continue;
 
             cv::Point p(static_cast<int>(x), static_cast<int>(y));
+
+            if (valid_mask.at<unsigned char>(p)!=mask_label) 
+                continue;
+
+            if (build_points)
+                points.push_back(p);
+
+            const cv::Vec3b colo = reference_image.at<cv::Vec3b>(p);
+            colors.push_back(cv::Vec3f(colo[0], colo[1], colo[2]));
+
+            const FLOAT_TYPE d_cd = std::abs(-lCD.M()*x + y - lCD.B()) / std::sqrt(1 + lCD.M()*lCD.M());
+            distances_line_cd.push_back(d_cd);
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------------
+void RotatedRect::BuildDistanceAndColorVectors_2(const cv::Mat &reference_image,
+        std::vector<cv::Vec3f> &colors, std::vector<FLOAT_TYPE> &distances_line_cd, std::vector<cv::Point> &points,
+        bool build_points) const
+// -----------------------------------------------------------------------------------
+{
+    const cv::Rect whole_im(0, 0, reference_image.cols, reference_image.rows);
+    const cv::Rect bound_re = this->GetCVRotatedRect().boundingRect();
+
+    const cv::Rect valid_re = whole_im & bound_re;
+
+    colors.clear();
+    distances_line_cd.clear();
+    colors.reserve(static_cast<size_t>(valid_re.area()));
+    distances_line_cd.reserve(static_cast<size_t>(valid_re.area()));
+
+    if (build_points)
+    {
+        points.clear();
+        points.reserve(static_cast<size_t>(valid_re.area()));
+    }
+
+    Line l1, l2, l3, l4;
+    const FLOAT_TYPE angle_lab = std::atan(lAB.M());
+    FLOAT_TYPE d_l1_l2;
+    if (angle_lab > CV_PI/4)
+    {
+        l1 = lDA;
+        l2 = lBC;
+        l3 = lAB;
+        l4 = lCD;
+        d_l1_l2 = static_cast<FLOAT_TYPE>(cv::norm(pA - pB));
+    }
+    else
+    {
+        l1 = lAB;
+        l2 = lCD;
+        l3 = lDA;
+        l4 = lBC;
+        d_l1_l2 = static_cast<FLOAT_TYPE>(cv::norm(pA - pD));
+    }
+
+    for (FLOAT_TYPE d_inc=0; d_inc<d_l1_l2; d_inc+=1.f)
+    {
+        Line curr_l;
+        if (d_inc==0)
+            curr_l = l1;
+        else
+        {
+            const Line lt1(l1.M(), l1.B() - d_inc*std::sqrt(l1.M()*l1.M() + 1));
+            const Line lt2(l1.M(), l1.B() + d_inc*std::sqrt(l1.M()*l1.M() + 1));
+
+            const FLOAT_TYPE d_lt1_l1 = std::abs(-lt1.B() + l1.B());
+            const FLOAT_TYPE d_lt1_l2 = std::abs(-lt1.B() + l2.B());
+
+            const FLOAT_TYPE d_lt2_l1 = std::abs(-lt2.B() + l1.B());
+            const FLOAT_TYPE d_lt2_l2 = std::abs(-lt2.B() + l2.B());
+
+            if (d_lt1_l1+d_lt1_l2 < d_lt2_l1+d_lt2_l2)
+                curr_l = lt1;
+            else
+                curr_l = lt2;
+        }
+
+        const FLOAT_TYPE xi = std::min((l3.B() - curr_l.B()) / (curr_l.M() - l3.M()), (l4.B() - curr_l.B()) / (curr_l.M() - l4.M()));
+        const FLOAT_TYPE xe = std::max((l3.B() - curr_l.B()) / (curr_l.M() - l3.M()), (l4.B() - curr_l.B()) / (curr_l.M() - l4.M()));
+
+        for(FLOAT_TYPE x = xi; x < xe; ++x)
+        {
+            const FLOAT_TYPE y = curr_l.Y(x);
+            if(x < 0 || x > reference_image.cols || y < 0 || y > reference_image.rows)
+                continue;
+
+            cv::Point p(static_cast<int>(x), static_cast<int>(y));
+            if(build_points)
+                points.push_back(p);
+
+            const cv::Vec3b colo = reference_image.at<cv::Vec3b>(p);
+            colors.push_back(cv::Vec3f(colo[0],colo[1],colo[2]));
+
+            const FLOAT_TYPE d_cd = std::abs(-lCD.M()*x + y - lCD.B()) / std::sqrt(1 + lCD.M()*lCD.M());
+            distances_line_cd.push_back(d_cd);
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------------
+FLOAT_TYPE RotatedRect::Area() const
+// -----------------------------------------------------------------------------------
+{
+    return static_cast<FLOAT_TYPE>(cv::norm(this->pA - this->pB) * cv::norm(this->pB - this->pC));
+}
+
+// -----------------------------------------------------------------------------------
+void RotatedRect::GetCorners(cv::Point2f &pA, cv::Point2f &pB,
+                             cv::Point2f &pC, cv::Point2f &pD) const
+// -----------------------------------------------------------------------------------
+{
+    pA = this->pA;
+    pB = this->pB;
+    pC = this->pC;
+    pD = this->pD;
+}
+
+// --------------------------------------------------------------------------------
