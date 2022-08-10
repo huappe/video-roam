@@ -609,4 +609,95 @@ void RotatedRect::GetCorners(cv::Point2f &pA, cv::Point2f &pB,
     pD = this->pD;
 }
 
-// --------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
+void RotatedRect::GetLines(Line &_lAB, Line &_lBC, Line &_lCD, Line &_lDA) const
+// -----------------------------------------------------------------------------------
+{
+    _lAB = this->lAB;
+    _lBC = this->lBC;
+    _lCD = this->lCD;
+    _lDA = this->lDA;
+}
+
+// -----------------------------------------------------------------------------------
+LineIntegralImage LineIntegralImage::CreateFromImage(const cv::Mat &image)
+// -----------------------------------------------------------------------------------
+{
+    LineIntegralImage out;
+    assert(image.type()==CV_8UC3 || image.depth()==CV_8UC1);
+
+    if (image.type()==CV_8UC3)
+    {
+        out.data.create(image.size(), CV_32SC3);
+
+        const cv::Vec3b* pixel_i = image.ptr<cv::Vec3b>(0);
+        cv::Vec3i* data_p = out.data.ptr<cv::Vec3i>(0);
+
+        #pragma omp parallel for
+        for(auto c = 0; c < image.cols; ++c)
+            data_p[c] = cv::Vec3i(pixel_i[c]);
+
+        for (int r=1; r<image.rows; ++r)
+        {
+            const cv::Vec3i* prev_data =  out.data.ptr<cv::Vec3i>(r-1);
+
+            pixel_i = image.ptr<cv::Vec3b>(r);
+            data_p =  out.data.ptr<cv::Vec3i>(r);
+
+            #pragma omp parallel for
+            for(auto c = 0; c < image.cols; ++c)
+                data_p[c] = prev_data[c] + cv::Vec3i(pixel_i[c]);
+        }
+    }
+    else if (image.type()==CV_8UC1)
+    {
+
+
+        out.data.create(image.size(), CV_32SC1);
+
+        const unsigned char* pixel_i = image.ptr<unsigned char>(0);
+        int* data_p =  out.data.ptr<int>(0);
+
+        #pragma omp parallel for
+        for(auto c=0; c < image.cols; ++c)
+            data_p[c] = static_cast<int>(pixel_i[c]);
+
+        for (int r=1; r<image.rows; ++r)
+        {
+            const int* prev_data =  out.data.ptr<int>(r-1);
+
+            pixel_i = image.ptr<unsigned char>(r);
+            data_p =  out.data.ptr<int>(r);
+
+            #pragma omp parallel for
+            for(auto c=0; c<image.cols; ++c)
+                data_p[c] = prev_data[c] + static_cast<int>(pixel_i[c]);
+        }
+
+    }
+    else if (image.type()==CV_32FC1)
+    {
+        out.data.create(image.size(), CV_64FC1);
+
+        const float* pixel_i = image.ptr<float>(0);
+        double* data_p =  out.data.ptr<double>(0);
+
+        #pragma omp parallel for
+        for (auto c=0; c<image.cols; ++c)
+            data_p[c] = static_cast<double>(pixel_i[c]);
+
+        for (int r=1; r<image.rows; ++r)
+        {
+            const double* prev_data =  out.data.ptr<double>(r-1);
+
+            pixel_i = image.ptr<float>(r);
+            data_p =  out.data.ptr<double>(r);
+
+            #pragma omp parallel for
+            for (auto c=0; c<image.cols; ++c)
+                data_p[c] = prev_data[c] + static_cast<double>(pixel_i[c]);
+        }
+    }
+
+    return out;
+}
