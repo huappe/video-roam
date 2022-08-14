@@ -132,4 +132,103 @@ static cv::Point2f centerNode(const std::list<Landmark>& graph_nodes,
         }
 
         center.x /= static_cast<FLOAT_TYPE>(graph_nodes.size());
-        center.y /= static_cast<FLOAT_TYPE>(graph_n
+        center.y /= static_cast<FLOAT_TYPE>(graph_nodes.size());
+    }
+    else
+    {
+        for(auto it = ++graph_nodes.begin(); it != graph_nodes.end(); ++it)
+        {
+            center.x += static_cast<FLOAT_TYPE>(GET_NODE_FROM_TUPLE(*it)->GetCoordinates().x);
+            center.y += static_cast<FLOAT_TYPE>(GET_NODE_FROM_TUPLE(*it)->GetCoordinates().y);
+        }
+
+        center.x /= static_cast<FLOAT_TYPE>(graph_nodes.size()) - 1;
+        center.y /= static_cast<FLOAT_TYPE>(graph_nodes.size()) - 1;
+    }
+
+    return center;
+}
+
+// -----------------------------------------------------------------------------------
+void StarGraph::UpdateLandmarks(const cv::Mat &image, const cv::Mat &mask, bool update_root)
+// -----------------------------------------------------------------------------------
+{
+    const size_t sz_before_adding = this->graph_nodes.size();
+
+    this->removeOutsiderLandmarks(mask, image);
+    this->addLandmarks(image, mask);
+
+    // Add virtual central node
+    if(sz_before_adding == 0 && this->graph_nodes.size() > 0)
+    {
+        const cv::Point2f center_pt = centerNode(this->graph_nodes);
+        auto node = std::make_shared<Node>(center_pt, Node::Params(this->params.node_side_length));
+
+        this->generic_unaries_per_landmark.push_front(GenericUnary::createUnaryTerm(GenericUnary::Params(0.f)));
+        this->tempnorm_pairwises_per_landmark.push_front(TempNormPairwise::createPairwiseTerm(TempNormPairwise::Params(0.f)));
+
+        node->AddUnaryTerm(this->generic_unaries_per_landmark.front());
+        node->AddPairwiseTerm(this->tempnorm_pairwises_per_landmark.front());
+
+        const Landmark lm = std::make_tuple(node, cv::Rect(), std::make_shared<KCF>());
+        this->graph_nodes.push_front(lm);
+    }
+
+    // we'll update also the root node
+    if(sz_before_adding > 0 && update_root)
+    {
+        const cv::Point center = centerNode(this->graph_nodes, false);
+        auto root_node = this->graph_nodes.begin();
+        auto root = GET_NODE_FROM_TUPLE(*root_node);
+        root->SetCoordinates(center);
+    }
+}
+
+// -----------------------------------------------------------------------------------
+void StarGraph::addLandmarks(const cv::Mat &image, const cv::Mat &mask)
+// -----------------------------------------------------------------------------------
+{
+    const std::vector<cv::Rect> rects = this->getMSERBoxes(image, mask);
+
+    for(size_t r = 0; r < rects.size(); ++r)
+        if(this->params.max_number_landmarks < 0 || this->graph_nodes.size() < this->params.max_number_landmarks)
+        {
+            KCF::Output response;
+            auto kcf = std::make_shared<KCF>();
+            try
+            {
+                kcf->Evaluate(image, response, rects[r]); //!> Init // TODO: Use a rect on image so to make it more efficient
+                kcf->Evaluate(image, response);		      //!> Evaluate response
+            }
+            catch(cv::Exception& ) // TODO: ooooh, this has to be fixed properly !!!
+            {
+                LOG_ERROR("Something went wrong");
+                continue;
+            }
+
+            double min, max;
+            cv::Point min_loc, max_loc;
+            cv::minMaxLoc(response.img_regression, &min, &max, &min_loc, &max_loc);
+
+            // Better use PSR?
+            if(max < this->params.min_response_new_landmarks)
+                continue;
+
+            auto node = std::make_shared<Node>(max_loc, Node::Params(this->params.node_side_length));
+
+            cv::Ptr<GenericUnary> generic_unary = GenericUnary::createUnaryTerm(GenericUnary::Params(1.f, ROAM::GenericUnary::NO_POOL));
+            cv::Ptr<TempNormPairwise> temp_norm_pairwise = TempNormPairwise::createPairwiseTerm(TempNormPairwise::Params(this->params.weight_pairwises));
+            generic_unaries_per_landmark.push_back(generic_unary);
+            tempnorm_pairwises_per_landmark.push_back(temp_norm_pairwise);
+
+            node->AddUnaryTerm(generic_unary);
+            node->AddPairwiseTerm(temp_norm_pairwise);
+
+            const Landmark lm = std::make_tuple(node, rects[r], kcf);
+            graph_nodes.push_back(lm);
+        }
+}
+
+// -----------------------------------------------------------------------------------
+void StarGraph::removeOutsiderLandmarks(const cv::Mat &mask, const cv::Mat &image)
+// -------------------------------------------------
