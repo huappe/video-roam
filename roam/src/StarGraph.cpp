@@ -231,4 +231,122 @@ void StarGraph::addLandmarks(const cv::Mat &image, const cv::Mat &mask)
 
 // -----------------------------------------------------------------------------------
 void StarGraph::removeOutsiderLandmarks(const cv::Mat &mask, const cv::Mat &image)
-// -------------------------------------------------
+// -----------------------------------------------------------------------------------
+{
+    if (graph_nodes.size()>0)
+    {
+        auto it1 = ++graph_nodes.begin();
+        auto it3 = ++generic_unaries_per_landmark.begin();
+        auto it4 = ++tempnorm_pairwises_per_landmark.begin();
+
+        while (it1 != graph_nodes.end())
+        {
+            KCF::Output response;
+            auto kcf = GET_KCF_FROM_TUPLE(*it1);
+
+            try
+            {
+                kcf->Evaluate(image, response);
+            }
+            catch (cv::Exception& ) // TODO: this should be fixed properly !!!
+            {
+                it1 = graph_nodes.erase(it1);
+                it3 = generic_unaries_per_landmark.erase(it3);
+                it4 = tempnorm_pairwises_per_landmark.erase(it4);
+            }
+
+            double min, max;
+            cv::Point min_loc, max_loc;
+            cv::minMaxLoc(response.img_regression, &min, &max, &min_loc, &max_loc);
+
+            if(mask.at<unsigned char>(GET_NODE_FROM_TUPLE(*it1)->GetCoordinates())>0 && max>=this->params.min_response_new_landmarks)
+            {
+                ++it1;
+                ++it3;
+                ++it4;
+            }
+            else
+            {
+                it1 = graph_nodes.erase(it1);
+                it3 = generic_unaries_per_landmark.erase(it3);
+                it4 = tempnorm_pairwises_per_landmark.erase(it4);
+            }
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------------
+void StarGraph::TrackLandmarks(const cv::Mat &next_image)
+// -----------------------------------------------------------------------------------
+{
+    if(graph_nodes.size()>0)
+    {
+        // No need to track for the root node
+        auto it1 = ++graph_nodes.begin();
+        auto it2 = ++generic_unaries_per_landmark.begin();
+        auto it3 = ++tempnorm_pairwises_per_landmark.begin();
+
+        // TODO: this should run in parallel!
+        for( ; it1 != graph_nodes.end(); ++it1, ++it2, ++it3)
+        {
+            KCF::Output out;
+
+            try
+            {
+                GET_KCF_FROM_TUPLE(*it1)->Evaluate(next_image, out);
+            }
+            catch (cv::Exception& ) // TODO: should be fixed properly
+            {
+                it1 = graph_nodes.erase(it1);
+                it2 = generic_unaries_per_landmark.erase(it2);
+                it3 = tempnorm_pairwises_per_landmark.erase(it3);
+
+                continue;
+            }
+
+            const cv::Ptr<GenericUnary>& gu = *it2;
+            cv::Mat norm_out;
+            cv::normalize(out.img_regression, norm_out, 0, 1.f, cv::NORM_MINMAX, CV_32FC1);
+
+            if(gu->IsInitialized())
+                gu->Update(1.f - norm_out);
+            else
+                gu->Init(1.f - norm_out);
+
+            const cv::Ptr<TempNormPairwise> &tp = *it3;
+            if(tp->IsInitialized())
+                tp->Update(cv::Mat(1,1,CV_32FC1, 0.f), cv::Mat());
+            else
+                tp->Init(cv::Mat(1,1,CV_32FC1, 0.f), cv::Mat());
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------------
+std::vector<size_t> StarGraph::VectorOfClosestLandmarkIndexes(cv::Point contour_pt,
+                                                 FLOAT_TYPE radius) const
+// -----------------------------------------------------------------------------------
+{
+    std::vector<size_t> closes_points_indexes;
+
+    // TODO: should run in parallel
+    size_t ind=0;
+    for(auto it = ++this->graph_nodes.begin(); it != this->graph_nodes.end(); ++it, ++ind)
+    {
+        const cv::Point &node_coordinates = GET_NODE_FROM_TUPLE(*it)->GetCoordinates();
+
+        if(static_cast<FLOAT_TYPE>(cv::norm( contour_pt - node_coordinates )) < radius )
+            closes_points_indexes.push_back(ind);
+    }
+
+    return closes_points_indexes;
+}
+
+// -----------------------------------------------------------------------------------
+cv::Mat StarGraph::VectorOfClosestLandmarkPoints(cv::Point contour_pt,
+                                                 FLOAT_TYPE radius) const
+// -----------------------------------------------------------------------------------
+{
+    // TODO: should run in parallel
+    std::vector<cv::Point> closes_points;
+    for (auto it= ++this->graph_nodes.begin(); it != this->graph_
