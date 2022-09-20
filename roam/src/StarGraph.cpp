@@ -349,4 +349,103 @@ cv::Mat StarGraph::VectorOfClosestLandmarkPoints(cv::Point contour_pt,
 {
     // TODO: should run in parallel
     std::vector<cv::Point> closes_points;
-    for (auto it= ++this->graph_nodes.begin(); it != this->graph_
+    for (auto it= ++this->graph_nodes.begin(); it != this->graph_nodes.end(); ++it)
+    {
+        const cv::Point &node_coordinates = GET_NODE_FROM_TUPLE(*it)->GetCoordinates();
+
+        if(static_cast<FLOAT_TYPE>(cv::norm( contour_pt - node_coordinates )) < radius)
+        {
+            closes_points.push_back(node_coordinates);
+        }
+    }
+
+    return cv::Mat(closes_points).clone();
+}
+
+// -----------------------------------------------------------------------------------
+FLOAT_TYPE StarGraph::AverageDistanceToClosestLandmarkPoints(cv::Point contour_pt,
+                                                             FLOAT_TYPE radius) const
+// -----------------------------------------------------------------------------------
+{
+    // TODO: should run in parallel
+    FLOAT_TYPE out = 0.f, cont = std::numeric_limits<FLOAT_TYPE>::epsilon();
+    for (auto it= ++this->graph_nodes.begin(); it != this->graph_nodes.end(); ++it)
+    {
+        const cv::Point &node_coordinates = GET_NODE_FROM_TUPLE(*it)->GetCoordinates();
+        FLOAT_TYPE dis = static_cast<FLOAT_TYPE>(cv::norm( contour_pt - node_coordinates ));
+        if(dis < radius)
+        {
+            out += dis;
+            cont += 1.f;
+        }
+    }
+
+    return out / cont;
+}
+
+// -----------------------------------------------------------------------------------
+cv::Mat StarGraph::DrawLandmarks( const cv::Mat &image, int rad_landmark_to_node)
+// -----------------------------------------------------------------------------------
+{
+    cv::Mat output = image.clone();
+
+    for(auto it=this->graph_nodes.begin(); it!=this->graph_nodes.end(); ++it)
+    {
+        const cv::Rect n_rect = GET_RECT_FROM_TUPLE(*it);
+        const cv::Point n_c = GET_NODE_FROM_TUPLE(*it)->GetCoordinates();
+
+        if(it==this->graph_nodes.begin())
+        {
+            cv::circle(output, n_c, 7, cv::Scalar(0,100,229), -1);
+            cv::circle(output, n_c, 5, cv::Scalar(255,255,255), -1);
+        }
+        else
+        {
+            cv::rectangle(output, n_rect, cv::Scalar(0,100,229), 5);
+            cv::circle(output, n_c, 3, cv::Scalar(0,100,229), -1);
+            //cv::circle(output, n_c, rad_landmark_to_node, cv::Scalar(255,255,255), 1);
+        }
+    }
+
+    return output;
+}
+
+// -----------------------------------------------------------------------------------
+std::vector<cv::Rect> StarGraph::getMSERBoxes(const cv::Mat &img, const cv::Mat &msk) const
+// -----------------------------------------------------------------------------------
+{
+    cv::Ptr<cv::MSER> mser = cv::MSER::create();
+    std::vector<cv::Rect> boxes_buf, boxes;
+
+    std::vector<std::vector<cv::Point> > msers;
+    mser->detectRegions(img, msers, boxes_buf);
+
+    for(size_t i = 0; i < msers.size(); ++i)
+    {
+        const cv::Rect &box = boxes_buf[i];
+
+        // if box is inside mask, is not overlapping and is big
+        if((msk.at<unsigned char>(cv::Point(cv::minAreaRect(cv::Mat(msers[i])).center)) > 0) && !isBoxRedundantAndTooSmall(box, boxes))
+            boxes.push_back(box);
+    }
+
+    return boxes;
+}
+
+// -----------------------------------------------------------------------------------
+bool StarGraph::isBoxRedundantAndTooSmall(const cv::Rect &box, const std::vector<cv::Rect>& new_boxes) const
+// -----------------------------------------------------------------------------------
+{
+    if(static_cast<FLOAT_TYPE>(box.area()) < this->params.min_area_landmark)
+        return true;
+
+    for(auto it=this->graph_nodes.begin(); it != this->graph_nodes.end(); ++it)
+        if((box&GET_RECT_FROM_TUPLE(*it)).area() > static_cast<int>(this->params.max_area_overlap_landmark))
+            return true;
+
+    for(auto it=new_boxes.begin(); it != new_boxes.end(); ++it)
+        if((box&(*it)).area() > static_cast<int>(this->params.max_area_overlap_landmark))
+            return true;
+
+    return false;
+}
