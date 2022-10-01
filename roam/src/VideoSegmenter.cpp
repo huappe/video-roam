@@ -204,4 +204,103 @@ void VideoSegmenter::reinitializeNode(Node &node, const Node &next_node, int pre
             // I guesss I don't need to check this since frame_mask was already updated:
             // if (!params.use_landmarks || !this->landmarks_tree->DPTableIsBuilt())
             snapcutPairwise->InitializeEdge(node.GetCoordinates(),
-                                            next_node.GetCo
+                                            next_node.GetCoordinates(),
+                                            this->next_image, this->frame_mask);
+
+            node.AddPairwiseTerm(snapcutPairwise);
+        }
+    }
+
+}
+
+// -----------------------------------------------------------------------------------
+template<typename T> static std::vector<T*>
+createVectorOfPointersFromList(std::list<T>& the_list)
+// -----------------------------------------------------------------------------------
+{
+    std::vector<T*> ptrs;
+    for(auto it = the_list.begin(); it != the_list.end(); ++it)
+	    ptrs.push_back(&(*it));
+
+    return ptrs;
+}
+
+// -----------------------------------------------------------------------------------
+void VideoSegmenter::SetContours(const std::vector<cv::Point> &contour_pts_)
+// -----------------------------------------------------------------------------------
+{
+    std::vector<cv::Point> contour_pts;
+    if(contour_pts_.empty() && !contour->contour_nodes.empty())
+    {
+        for(auto itc=contour->contour_nodes.begin(); itc!=this->contour->contour_nodes.end(); ++itc)
+            contour_pts.push_back(itc->GetCoordinates());
+    }
+    else
+    {
+        contour_pts = contour_pts_;
+    }
+
+    chrono_timer_per_frame.Start();
+
+    if (!this->contour_init)
+    {
+        this->params.Print();
+
+        this->frame_mask = cv::Mat::zeros(this->next_image.size(), CV_8UC1);
+        this->contour = std::make_shared<ClosedContour>(ClosedContour::Params(this->params.label_space_side * this->params.label_space_side));
+
+        contourToMask(contour_pts, this->frame_mask, this->next_image.size());
+
+        // Initializing position of nodes with contour_pts
+        this->contour->contour_nodes.clear();
+        for(size_t i=0; i<contour_pts.size(); ++i)
+            this->contour->contour_nodes.push_back(ROAM::Node(contour_pts[i], Node::Params(params.label_space_side)));
+
+        frame_counter=0;
+        if(write_masks)
+        {
+            // Writing the first frame output
+            cv::Mat draw = this->contour->DrawContour(this->prev_image, this->frame_mask);
+            std::string filename = namefolder + std::string("/cont_") + std::to_string(frame_counter) + std::string(".png");
+            cv::imwrite(filename, draw);
+
+            filename = namefolder + std::string("/") + std::to_string(frame_counter) + std::string(".png");
+            cv::imwrite(filename, frame_mask);
+            ++frame_counter;
+        }
+
+        // Initialize Landmarks
+        if(this->params.use_landmarks)
+        {
+            this->landmarks_tree = std::make_shared<StarGraph>(
+                    StarGraph::Params(this->params.landmarks_searchspace_side,
+                    this->params.landmark_min_response, this->params.landmark_max_area_overlap,
+                    this->params.landmark_min_area, this->params.max_number_landmarks,
+                    this->params.landmark_pairwise_weight));
+
+            switch (this->params.warper_type)
+            {
+            case WARP_TRANSLATION:
+                this->contour_warper = std::make_shared<RigidTransform_ContourWarper>(RigidTransform_ContourWarper::Params(RigidTransform_ContourWarper::TRANSLATION));
+                break;
+
+            default:
+            case WARP_SIMILARITY:
+                this->contour_warper = std::make_shared<RigidTransform_ContourWarper>(RigidTransform_ContourWarper::Params(RigidTransform_ContourWarper::SIMILARITY));
+                break;
+            }
+        }
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////// Processing Landmark Nodes ////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Create / Check for new  landmarks
+    if(this->params.use_landmarks)
+    {
+        this->landmarks_tree->UpdateLandmarks(this->prev_image, this->frame_mask, true);
+        this->landmarks_tree->TrackLandmarks(this->next_image); //landmarks only get moved when DP solved
+
+        if(this->landmarks_tree->graph_nodes.size()>0)
+        {
+            this->landm
