@@ -303,4 +303,91 @@ void VideoSegmenter::SetContours(const std::vector<cv::Point> &contour_pts_)
 
         if(this->landmarks_tree->graph_nodes.size()>0)
         {
-            this->landm
+            this->landmarks_tree->BuildDPTable();
+
+            // Run DP and apply moves
+            FLOAT_TYPE min_cost_landmarks = 0.f;
+            if(this->landmarks_tree->GetDPTable()->pairwise_costs.size() > 0)
+            {
+                min_cost_landmarks = this->landmarks_tree->RunDPInference();
+                this->landmarks_tree->ApplyMoves();
+            }
+            LOG_INFO("VideoSegmenter::SetContours() - Landmarks min_cost: " << min_cost_landmarks);
+        }
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////// Processing Intermediate Mask ////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    std::vector<Node*> contour_nodes_ptrs = createVectorOfPointersFromList(contour->contour_nodes);
+    cv::Mat intermediate_mask;
+    std::vector<cv::Point> intermediate_contour;
+    std::vector<cv::Point> intermediate_motion_diff;
+    if (this->params.use_landmarks && this->landmarks_tree->DPTableIsBuilt())
+    {
+        const std::shared_ptr<RigidTransform_ContourWarper> &warper = std::dynamic_pointer_cast<RigidTransform_ContourWarper>(this->contour_warper);
+        warper->Init(this->landmarks_tree->correspondences_a, this->landmarks_tree->correspondences_b,this->frame_mask);
+        intermediate_contour = warper->Warp(this->contour->contour_nodes);
+
+        intermediate_motion_diff = findDiffsContourMove(intermediate_contour);
+        contourToMask(intermediate_contour, intermediate_mask, this->next_image.size());
+    }
+    else
+        intermediate_mask = this->frame_mask;
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////// Processing Contour Nodes /////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    // Check if Green theorem is needed
+    if (params.use_green_theorem_term)
+    {
+        if (!contour_init)
+            fb_model = GlobalModel(GlobalModel::Params(3,50.f,50.f,1000.f));
+
+        this->updateIntegralNegRatioForGreenTheorem(intermediate_mask);
+    }
+
+    // Simple terms if/else
+    if (!contour_init)
+    {
+        if (params.use_gradients_unary)
+        {
+            contour_elements.contour_gradient_unary = ROAM::GradientUnary::createUnaryTerm(
+                            ROAM::GradientUnary::Params(params.grad_type, params.grad_kernel_size, params.gradients_weight,
+                                                        params.gaussian_smoothing_factor));
+            contour_elements.contour_gradient_unary->Init(this->next_image);
+        }
+
+        if (params.use_norm_pairwise)
+        {
+            contour_elements.contour_norm_pairwise = ROAM::NormPairwise::createPairwiseTerm(ROAM::NormPairwise::Params(params.norm_type, params.norm_weight));
+            contour_elements.contour_norm_pairwise->Init(cv::Mat(), cv::Mat());
+        }
+
+        if (params.use_gradient_pairwise && params.use_gradients_unary)
+        {
+            contour_elements.contour_generic_pairwise = ROAM::GenericPairwise::createPairwiseTerm(ROAM::GenericPairwise::Params(params.gradient_pairwise_weight));
+            contour_elements.contour_generic_pairwise->Init(contour_elements.contour_gradient_unary->GetUnaries(), cv::Mat());
+        }
+
+    }
+    else
+    {
+
+        if (params.use_gradients_unary)
+            contour_elements.contour_gradient_unary->Update(this->next_image);
+
+        if (params.use_gradient_pairwise && params.use_gradients_unary)
+            contour_elements.contour_generic_pairwise->Update(contour_elements.contour_gradient_unary->GetUnaries(), cv::Mat());
+
+        if (params.use_norm_pairwise)
+            contour_elements.contour_norm_pairwise->Update(cv::Mat(), cv::Mat());
+    }
+
+    // Resize lists of pairwises
+    if (!contour_init)
+    {
+        if (params.use_snapcut_pairwise)
+        {
+            contour_elements.snapcut_pairwises_per
