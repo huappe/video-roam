@@ -390,4 +390,75 @@ void VideoSegmenter::SetContours(const std::vector<cv::Point> &contour_pts_)
     {
         if (params.use_snapcut_pairwise)
         {
-            contour_elements.snapcut_pairwises_per
+            contour_elements.snapcut_pairwises_per_contour_node = std::list<cv::Ptr<ROAM::SnapcutPairwise>>(contour_nodes_ptrs.size());
+        }
+
+        if (params.use_temp_norm_pairwise)
+        {
+            contour_elements.tempangle_pairwises_per_contour_node = std::list<cv::Ptr<ROAM::TempAnglePairwise>>(contour_nodes_ptrs.size());
+            contour_elements.tempnorm_pairwises_per_contour_node = std::list<cv::Ptr<ROAM::TempNormPairwise>>(contour_nodes_ptrs.size());
+            contour_elements.prev_norms = std::list<FLOAT_TYPE>(contour_nodes_ptrs.size(), -1.f);
+            contour_elements.prev_angles = std::list<FLOAT_TYPE>(contour_nodes_ptrs.size(), static_cast<FLOAT_TYPE>(-5 * CV_PI));
+        }
+
+        if (params.use_landmarks)
+            contour_elements.distance_unaries_per_contour_node = std::list<cv::Ptr<ROAM::DistanceUnary>>(contour_nodes_ptrs.size());
+
+        if (params.use_green_theorem_term)
+            contour_elements.green_theorem_pairwises = std::list<cv::Ptr<ROAM::GreenTheoremPairwise>>(contour_nodes_ptrs.size());
+
+    }
+
+    // For simplicity: Let us first process non-cuda terms
+    if (!contour_init)
+    {
+        #pragma omp parallel for
+        for(auto ii = 0; ii<contour_nodes_ptrs.size(); ++ii)
+        {
+            if (params.use_gradients_unary)
+                contour_nodes_ptrs[ii]->AddUnaryTerm(contour_elements.contour_gradient_unary);
+
+            if (params.use_norm_pairwise)
+                contour_nodes_ptrs[ii]->AddPairwiseTerm(contour_elements.contour_norm_pairwise);
+
+            if (params.use_temp_norm_pairwise)
+            {
+                auto tempnorm_pairwises_per_contour_node_it = std::next(contour_elements.tempnorm_pairwises_per_contour_node.begin(), ii);
+                auto tempangle_pairwises_per_contour_node_it = std::next(contour_elements.tempangle_pairwises_per_contour_node.begin(), ii);
+                auto prev_norms_it = std::next(contour_elements.prev_norms.begin(), ii);
+                auto prev_angles_it = std::next(contour_elements.prev_angles.begin(), ii);
+
+                const cv::Ptr<ROAM::TempAnglePairwise> tempAnglePairwise = ROAM::TempAnglePairwise::createPairwiseTerm(ROAM::TempAnglePairwise::Params(this->params.temp_angle_weight));
+                const cv::Ptr<ROAM::TempNormPairwise> tempNormPairwise = ROAM::TempNormPairwise::createPairwiseTerm(ROAM::TempNormPairwise::Params(this->params.temp_norm_weight));
+
+                tempAnglePairwise->Init( cv::Mat(cv::Mat_<FLOAT_TYPE>(1,1)<<*prev_angles_it), cv::Mat() );
+                tempNormPairwise->Init( cv::Mat(cv::Mat_<FLOAT_TYPE>(1,1)<<*prev_norms_it), cv::Mat() );
+
+                *tempangle_pairwises_per_contour_node_it = tempAnglePairwise;
+                *tempnorm_pairwises_per_contour_node_it = tempNormPairwise;
+
+                contour_nodes_ptrs[ii]->AddPairwiseTerm(tempAnglePairwise);
+                contour_nodes_ptrs[ii]->AddPairwiseTerm(tempNormPairwise);
+
+                if (ii == contour_nodes_ptrs.size()-1)
+                {
+                    const cv::Point a = contour_nodes_ptrs[ii]->GetCoordinates();
+                    const cv::Point b = contour_nodes_ptrs[0]->GetCoordinates();
+                    *prev_angles_it = static_cast<FLOAT_TYPE>(std::atan2(b.y - a.y, b.x - a.x));
+                    *prev_norms_it = static_cast<FLOAT_TYPE>(cv::norm(b - a));
+                }
+                else
+                {
+                    const cv::Point a = contour_nodes_ptrs[ii]->GetCoordinates();
+                    const cv::Point b = contour_nodes_ptrs[ii+1]->GetCoordinates();
+                    *prev_angles_it = static_cast<FLOAT_TYPE>(std::atan2(b.y - a.y, b.x - a.x));
+                    *prev_norms_it = static_cast<FLOAT_TYPE>(cv::norm(b - a));
+                }
+            }
+
+            if (params.use_landmarks)
+            {
+                auto distance_unaries_per_contour_node_it = std::next(contour_elements.distance_unaries_per_contour_node.begin(), ii);
+                cv::Ptr<ROAM::DistanceUnary> distanceUnary = ROAM::DistanceUnary::createUnaryTerm(
+                            ROAM::DistanceUnary::Params(this->params.landmark_to_node_weight) );
+                distanceUnary->Init( this->landmarks_tree->VectorOfClosestLandm
