@@ -461,4 +461,75 @@ void VideoSegmenter::SetContours(const std::vector<cv::Point> &contour_pts_)
                 auto distance_unaries_per_contour_node_it = std::next(contour_elements.distance_unaries_per_contour_node.begin(), ii);
                 cv::Ptr<ROAM::DistanceUnary> distanceUnary = ROAM::DistanceUnary::createUnaryTerm(
                             ROAM::DistanceUnary::Params(this->params.landmark_to_node_weight) );
-                distanceUnary->Init( this->landmarks_tree->VectorOfClosestLandm
+                distanceUnary->Init( this->landmarks_tree->VectorOfClosestLandmarkPoints(contour_nodes_ptrs[ii]->GetCoordinates(),
+                                     this->params.landmark_to_node_radius) );
+
+                distanceUnary->SetPastDistance(-1.f /*when a negative number is passed, the cost becomes 0: only for intiialization*/);
+                *distance_unaries_per_contour_node_it = distanceUnary;
+                contour_nodes_ptrs[ii]->AddUnaryTerm(distanceUnary);
+            }
+
+            if (params.use_green_theorem_term)
+            {
+                auto green_pairwises_per_contour_node_it = std::next(contour_elements.green_theorem_pairwises.begin(), ii);
+                const cv::Ptr<ROAM::GreenTheoremPairwise> gtPairwise =
+                        ROAM::GreenTheoremPairwise::createPairwiseTerm(
+                            ROAM::GreenTheoremPairwise::Params(this->params.green_theorem_weight,
+                                                               this->contour->IsCounterClockWise(),
+                                                               ii, (ii+1==contour_nodes_ptrs.size())?0:ii+1));
+                //std::cout<<integral_negative_ratio_foreground_background_likelihood<<std::endl;
+                gtPairwise->Init(this->next_image, this->integral_negative_ratio_foreground_background_likelihood);
+
+                *green_pairwises_per_contour_node_it = gtPairwise;
+                contour_nodes_ptrs[ii]->AddPairwiseTerm(gtPairwise);
+            }
+
+#ifndef WITH_CUDA
+            // Fill vector of snapcut terms (non cuda)
+            if (params.use_snapcut_pairwise)
+            {
+                auto snapcut_pairwises_per_contour_node_it = std::next(contour_elements.snapcut_pairwises_per_contour_node.begin(), ii);
+                ROAM::SnapcutPairwise::Params snapcut_params(params.snapcut_weight,
+                                                             params.snapcut_sigma_color, params.snapcut_region_height,
+                                                             params.label_space_side,
+                                                             params.snapcut_number_clusters, false);
+
+                cv::Ptr<ROAM::SnapcutPairwise> snapcutPairwise = ROAM::SnapcutPairwise::createPairwiseTerm(snapcut_params);
+                snapcutPairwise->Init(this->next_image, intermediate_mask);
+
+                if (!params.use_landmarks || !landmarks_tree->DPTableIsBuilt())
+                {
+                    if (ii == contour_nodes_ptrs.size()-1)
+                        snapcutPairwise->InitializeEdge(contour_nodes_ptrs[ii]->GetCoordinates(), contour_nodes_ptrs[0]->GetCoordinates(),
+                                prev_image, frame_mask);
+                    else
+                        snapcutPairwise->InitializeEdge(contour_nodes_ptrs[ii]->GetCoordinates(), contour_nodes_ptrs[ii+1]->GetCoordinates(),
+                                 prev_image, frame_mask);
+                    *(snapcut_pairwises_per_contour_node_it) = snapcutPairwise;
+                    contour_nodes_ptrs[ii]->AddPairwiseTerm(*snapcut_pairwises_per_contour_node_it);
+                }
+                else
+                {
+                    if (ii == contour_nodes_ptrs.size()-1)
+                        snapcutPairwise->InitializeEdge(contour_nodes_ptrs[ii]->GetCoordinates(), contour_nodes_ptrs[0]->GetCoordinates(),
+                                prev_image, frame_mask,
+                                intermediate_motion_diff[ii], intermediate_motion_diff[0]);
+                    else
+                        snapcutPairwise->InitializeEdge(contour_nodes_ptrs[ii]->GetCoordinates(), contour_nodes_ptrs[ii+1]->GetCoordinates(),
+                                prev_image, frame_mask,
+                                intermediate_motion_diff[ii], intermediate_motion_diff[ii+1]);
+                    *snapcut_pairwises_per_contour_node_it = snapcutPairwise;
+                    contour_nodes_ptrs[ii]->AddPairwiseTerm(*snapcut_pairwises_per_contour_node_it);
+                }
+            }
+#endif
+        }
+    }
+    else // The contour was already initialized, so we update
+    {
+        if (this->params.use_landmarks)
+        {
+            #pragma omp parallel for
+            for(auto ii = 0; ii<contour_nodes_ptrs.size(); ++ii)
+            {
+                auto distance_unaries_per_contour_nod
