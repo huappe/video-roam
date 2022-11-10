@@ -606,4 +606,71 @@ void VideoSegmenter::SetContours(const std::vector<cv::Point> &contour_pts_)
                 {
                     if (ii == contour_nodes_ptrs.size()-1)
                         snapcutPairwise->InitializeEdge(contour_nodes_ptrs[ii]->GetCoordinates(), contour_nodes_ptrs[0]->GetCoordinates(),
-         
+                                prev_image, frame_mask);
+                    else
+                        snapcutPairwise->InitializeEdge(contour_nodes_ptrs[ii]->GetCoordinates(), contour_nodes_ptrs[ii+1]->GetCoordinates(),
+                                prev_image, frame_mask);
+                }
+                else
+                {
+                    if (ii == contour_nodes_ptrs.size()-1)
+                        snapcutPairwise->InitializeEdge(contour_nodes_ptrs[ii]->GetCoordinates(), contour_nodes_ptrs[0]->GetCoordinates(),
+                                prev_image, frame_mask,
+                                intermediate_motion_diff[ii], intermediate_motion_diff[0]);
+                    else
+                        snapcutPairwise->InitializeEdge(contour_nodes_ptrs[ii]->GetCoordinates(), contour_nodes_ptrs[ii+1]->GetCoordinates(),
+                                prev_image, frame_mask,
+                                intermediate_motion_diff[ii], intermediate_motion_diff[ii+1]);
+                }
+            }
+        }
+#endif
+    }
+
+#ifdef WITH_CUDA
+    contour->BuildDPTable();
+    if (params.use_snapcut_pairwise)
+    {
+        if (!contour_init)
+        {
+            ROAM::SnapcutPairwise::Params snapcut_params(params.snapcut_weight,
+                                                         params.snapcut_sigma_color, params.snapcut_region_height,
+                                                         params.label_space_side, params.snapcut_number_clusters, true);
+
+            #pragma omp parallel for
+            for(auto ii = 0; ii<contour_nodes_ptrs.size(); ++ii)
+            {
+                auto snapcut_pairwises_per_contour_node_it = std::next(contour_elements.snapcut_pairwises_per_contour_node.begin(), ii);
+
+                *snapcut_pairwises_per_contour_node_it = ROAM::SnapcutPairwise::createPairwiseTerm(snapcut_params);
+                (*snapcut_pairwises_per_contour_node_it)->Init(this->next_image, intermediate_mask);
+
+                if (!params.use_landmarks || !landmarks_tree->DPTableIsBuilt())
+                {
+
+                    if (ii == contour_nodes_ptrs.size()-1)
+                        (*snapcut_pairwises_per_contour_node_it)->InitializeEdge(contour_nodes_ptrs[ii]->GetCoordinates(),
+                                                                               contour_nodes_ptrs[0]->GetCoordinates(),
+                                                                               prev_image, frame_mask);
+                    else
+                        (*snapcut_pairwises_per_contour_node_it)->InitializeEdge(contour_nodes_ptrs[ii]->GetCoordinates(),
+                                                                               contour_nodes_ptrs[ii+1]->GetCoordinates(),
+                                                                               prev_image, frame_mask);
+                }
+                else
+                {
+                    if (ii == contour_nodes_ptrs.size()-1)
+                        (*snapcut_pairwises_per_contour_node_it)->InitializeEdge(contour_nodes_ptrs[ii]->GetCoordinates(),
+                                                                               contour_nodes_ptrs[0]->GetCoordinates(),
+                                                                               prev_image, frame_mask,
+                                                                               intermediate_motion_diff[ii],
+                                                                               intermediate_motion_diff[0]);
+                    else
+                        (*snapcut_pairwises_per_contour_node_it)->InitializeEdge(contour_nodes_ptrs[ii]->GetCoordinates(),
+                                                                               contour_nodes_ptrs[ii+1]->GetCoordinates(),
+                                                                               prev_image, frame_mask,
+                                                                               intermediate_motion_diff[ii],
+                                                                               intermediate_motion_diff[ii+1]);
+                }
+
+                contour_nodes_ptrs[ii]->AddPairwiseTerm(*snapcut_pairwises_per_
