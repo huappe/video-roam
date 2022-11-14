@@ -673,4 +673,105 @@ void VideoSegmenter::SetContours(const std::vector<cv::Point> &contour_pts_)
                                                                                intermediate_motion_diff[ii+1]);
                 }
 
-                contour_nodes_ptrs[ii]->AddPairwiseTerm(*snapcut_pairwises_per_
+                contour_nodes_ptrs[ii]->AddPairwiseTerm(*snapcut_pairwises_per_contour_node_it);
+            }
+        }
+        else
+        {
+            #pragma omp parallel for
+            for(auto ii = 0; ii<contour_nodes_ptrs.size(); ++ii)
+            {
+                auto snapcut_pairwises_per_contour_node_it = std::next(contour_elements.snapcut_pairwises_per_contour_node.begin(), ii);
+
+                cv::Ptr<ROAM::SnapcutPairwise>& snapcutPairwise = *snapcut_pairwises_per_contour_node_it;
+
+                snapcutPairwise->Update(this->next_image, intermediate_mask);
+
+                if (!params.use_landmarks || !landmarks_tree->DPTableIsBuilt())
+                {
+                    if (ii == contour_nodes_ptrs.size()-1)
+                        snapcutPairwise->InitializeEdge(contour_nodes_ptrs[ii]->GetCoordinates(),
+                                                        contour_nodes_ptrs[0]->GetCoordinates(), prev_image, frame_mask);
+                    else
+                        snapcutPairwise->InitializeEdge(contour_nodes_ptrs[ii]->GetCoordinates(),
+                                                        contour_nodes_ptrs[ii+1]->GetCoordinates(), prev_image, frame_mask);
+                }
+                else
+                {
+                    if (ii == contour_nodes_ptrs.size()-1)
+                        snapcutPairwise->InitializeEdge(contour_nodes_ptrs[ii]->GetCoordinates(),
+                                                        contour_nodes_ptrs[0]->GetCoordinates(),
+                                                        prev_image, frame_mask,
+                                                        intermediate_motion_diff[ii],
+                                                        intermediate_motion_diff[0]);
+                    else
+                        snapcutPairwise->InitializeEdge(contour_nodes_ptrs[ii]->GetCoordinates(),
+                                                        contour_nodes_ptrs[ii+1]->GetCoordinates(),
+                                                        prev_image, frame_mask,
+                                                        intermediate_motion_diff[ii],
+                                                        intermediate_motion_diff[ii+1]);
+                }
+
+                *snapcut_pairwises_per_contour_node_it = snapcutPairwise;
+            }
+        }
+    }
+
+    if (params.use_landmarks && landmarks_tree->DPTableIsBuilt())
+        performIntermediateContourMove(intermediate_contour);
+
+    if (params.use_snapcut_pairwise)
+    {
+        contour->ExecuteCudaPairwises(params.snapcut_region_height, params.snapcut_sigma_color,
+                                      params.snapcut_weight, next_image.rows, next_image.cols);
+    }
+
+    contour->BuildDPTable();
+#else
+    if (params.use_landmarks && landmarks_tree->DPTableIsBuilt())
+        performIntermediateContourMove(intermediate_contour);
+
+    contour->BuildDPTable();
+#endif
+
+    this->contour_init = true;
+}
+
+// -----------------------------------------------------------------------------------
+bool VideoSegmenter::IsInit() const
+// -----------------------------------------------------------------------------------
+{
+    return this->contour_init;
+}
+
+// -----------------------------------------------------------------------------------
+void VideoSegmenter::WriteOutput(const std::string &foldername)
+// -----------------------------------------------------------------------------------
+{
+    this->namefolder = foldername;
+    this->write_masks = true;
+}
+
+// -----------------------------------------------------------------------------------
+std::vector<cv::Point> VideoSegmenter::ProcessFrame()
+// -----------------------------------------------------------------------------------
+{
+    assert(this->contour_init);
+
+    this->current_contour_cost = this->contour->RunDPInference();
+
+    this->contour->ApplyMoves();
+
+    std::vector<cv::Point> output_cont_pts;
+    for (auto itc=contour->contour_nodes.begin(); itc!=this->contour->contour_nodes.end(); ++itc)
+        output_cont_pts.push_back(itc->GetCoordinates());
+
+    contourToMask(output_cont_pts, this->frame_mask, this->next_image.size());
+
+    if (this->params.use_graphcut_term)
+        automaticReparametrization();
+
+
+    const double t = chrono_timer_per_frame.Stop();
+    LOG_INFO("VideoSegmenter::ProcessFrame() - TOTAL per-frame exec: " << t);
+    LOG_INFO("VideoSegmenter::Process
