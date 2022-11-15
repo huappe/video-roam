@@ -774,4 +774,129 @@ std::vector<cv::Point> VideoSegmenter::ProcessFrame()
 
     const double t = chrono_timer_per_frame.Stop();
     LOG_INFO("VideoSegmenter::ProcessFrame() - TOTAL per-frame exec: " << t);
-    LOG_INFO("VideoSegmenter::Process
+    LOG_INFO("VideoSegmenter::ProcessFrame() - min cost: " << this->current_contour_cost );
+
+    costs_per_frame.push_back(this->current_contour_cost);
+
+    return output_cont_pts;
+}
+
+// -----------------------------------------------------------------------------------
+cv::Mat VideoSegmenter::WritingOperations()
+// -----------------------------------------------------------------------------------
+{
+    if (write_masks)
+    {
+        const cv::Mat draw = this->contour->DrawContour(this->next_image, this->frame_mask);
+        std::string filename = namefolder + std::string("/cont_") + std::to_string(frame_counter) + std::string(".png");
+        cv::imwrite(filename, draw);
+
+        filename = namefolder + std::string("/") + std::to_string(frame_counter) + std::string(".png");
+        cv::imwrite(filename, frame_mask);
+
+        filename = namefolder + std::string("/cont_") + std::to_string(frame_counter) + std::string(".txt");
+        this->WriteTxt(filename);
+
+        ++frame_counter;
+    }
+    return frame_mask;
+}
+
+// -----------------------------------------------------------------------------------
+void VideoSegmenter::WriteTxt(const std::string &filename) const
+// -----------------------------------------------------------------------------------
+{
+	std::ofstream f_out(filename);
+
+	const auto &nodes = this->contour->contour_nodes;
+	f_out << nodes.size() << " # number of nodes (for closed contour)" <<std::endl;
+	f_out << "x y" << std::endl;
+
+	for (auto it = nodes.begin(); it != nodes.end(); ++it)
+		f_out << it->GetCoordinates().x << " " << it->GetCoordinates().y << std::endl;
+
+
+	if(this->params.use_landmarks)
+	{
+		f_out << "------------------------------------------------" << std::endl;
+
+		const auto &landmarks = this->landmarks_tree->graph_nodes;
+		
+		f_out << std::endl << landmarks.size() << " # number of landmarks (pictorial structure)" << std::endl;
+		f_out << "x y" << std::endl;
+
+		for (auto it = landmarks.begin(); it != landmarks.end(); ++it)
+		{
+			const cv::Point n_c = GET_NODE_FROM_TUPLE(*it)->GetCoordinates();
+			f_out << n_c.x << " " << n_c.y << std::endl;
+		}
+
+	}
+
+}
+
+// -----------------------------------------------------------------------------------
+VideoSegmenter::Params VideoSegmenter::getParams() const
+// -----------------------------------------------------------------------------------
+{
+    return params;
+}
+
+// -----------------------------------------------------------------------------------
+void VideoSegmenter::setParams(const VideoSegmenter::Params &value)
+// -----------------------------------------------------------------------------------
+{
+    params = value;
+}
+
+// -----------------------------------------------------------------------------------
+static
+std::vector<cv::Point> ContourToVectorPoints(const std::shared_ptr<ClosedContour> &contour)
+// -----------------------------------------------------------------------------------
+{
+    std::vector<cv::Point> pts;
+
+    for (auto it = contour->contour_nodes.begin(); it != contour->contour_nodes.end(); ++it)
+        pts.push_back(it->GetCoordinates());
+
+    return pts;
+}
+
+// -----------------------------------------------------------------------------------
+static
+cv::Rect FindContourRange(const std::vector<cv::Point> &contour, int slack=30)
+// -----------------------------------------------------------------------------------
+{
+    cv::Rect range;
+
+    int min_x=100000;
+    int min_y=100000;
+    int max_x=0;
+    int max_y=0;
+    for (int p_i = 0; p_i < contour.size(); ++p_i)
+    {
+        const cv::Point& p = contour[p_i];
+
+
+        min_x = std::min(p.x,min_x);
+        max_x = std::max(p.x,max_x);
+        min_y = std::min(p.y,min_y);
+        max_y = std::max(p.y,max_y);
+    }
+
+    range = cv::Rect(min_x-slack/2, min_y-slack/2, max_x-min_x+slack, max_y-min_y+slack);
+    return range;
+}
+
+
+// -----------------------------------------------------------------------------------
+void VideoSegmenter::automaticReparametrization()
+// -----------------------------------------------------------------------------------
+{
+    std::vector<cv::Point> next_contour = ContourToVectorPoints(this->contour);
+
+    LOG_INFO("VideoSegmenter::AutomaticReparametrization() - Reparametrizing ");
+
+    cv::Mat gc_segmented;
+
+    bool 
