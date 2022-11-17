@@ -1053,4 +1053,136 @@ void VideoSegmenter::automaticReparametrization()
 
                 if(proposed_energy < (1.f-this->params.reparametrization_failsafe)*this->current_contour_cost)
                 {
-                    this->contour =
+                    this->contour = proposed_contour;
+                    this->current_contour_cost = proposed_energy;
+                    this->contour_elements = proposed_ce;
+                    next_contour = ContourToVectorPoints(proposed_contour);
+                    contourToMask(next_contour, this->frame_mask, this->frame_mask.size());
+
+                    keep_checking_for_proposals = true;
+
+                    break;
+                }
+            } // end if blob add
+
+        }// endfor: propose move and compute new energy
+        ++iter_while;
+
+    }// end while
+}
+
+
+// -----------------------------------------------------------------------------------
+void VideoSegmenter::updateIntegralNegRatioForGreenTheorem(const cv::Mat &mask)
+// -----------------------------------------------------------------------------------
+{
+    if (!fb_model.initialized)
+        this->fb_model.Initialize(this->prev_image, mask);
+    else
+        this->fb_model.Update(this->prev_image, mask);
+
+    this->fb_model.ComputeLikelihood(this->next_image, this->global_foreground_likelihood, this->global_background_likelihood);
+
+    // compute negative log fg/bg ratio
+    const cv::Mat ratio =
+        this->global_foreground_likelihood / (this->global_background_likelihood + std::numeric_limits<FLOAT_TYPE>::epsilon());
+
+    cv::Mat ratio_cost;
+    cv::log(ratio, ratio_cost);
+
+    cv::Mat neg_ratio = -ratio_cost;
+
+    this->integral_negative_ratio_foreground_background_likelihood =
+            this->accumulate(neg_ratio);
+}
+
+// -----------------------------------------------------------------------------------
+cv::Mat VideoSegmenter::accumulate(const cv::Mat &input) const
+// -----------------------------------------------------------------------------------
+{
+    assert(input.type() == CV_32FC1);
+
+    cv::Mat output = cv::Mat::zeros(input.size(), input.type());
+
+    // copy first row
+    input.row(0).copyTo(output.row(0));
+
+    // per-column line integrals
+    #pragma omp parallel for
+    for(auto x = 0; x < input.cols; ++x)
+        for(auto y = 1; y < input.rows; ++y)
+            output.at<float>(y, x) = input.at<float>(y, x) + output.at<float>(y - 1, x);
+
+    return output;
+}
+
+// -----------------------------------------------------------------------------------
+void VideoSegmenter::ContourElementsHelper::PruneContourElements(const std::vector<bool> &remove, bool use_du, bool use_sc,
+        bool use_tn, bool use_gt)
+// -----------------------------------------------------------------------------------
+{
+    auto it_du = this->distance_unaries_per_contour_node.begin();
+    auto it_pa = this->prev_angles.begin();
+    auto it_pn = this->prev_norms.begin();
+    auto it_sc = this->snapcut_pairwises_per_contour_node.begin();
+    auto it_tn = this->tempnorm_pairwises_per_contour_node.begin();
+    auto it_ta = this->tempangle_pairwises_per_contour_node.begin();
+    auto it_gt = this->green_theorem_pairwises.begin();
+
+    std::list<bool> remove_list;
+    std::copy( remove.begin(), remove.end(), std::back_inserter( remove_list ) );
+
+    auto it_rm = remove_list.begin();
+
+    while (it_rm != remove_list.end())
+    {
+        bool is_rem = *it_rm;
+        if (is_rem)
+        {
+            it_rm = remove_list.erase(it_rm);
+            if (use_du)
+                it_du = distance_unaries_per_contour_node.erase(it_du);
+
+            if (use_tn)
+                it_pa = prev_angles.erase(it_pa);
+
+            if (use_tn)
+                it_pn = prev_norms.erase(it_pn);
+
+            if (use_sc)
+                it_sc = snapcut_pairwises_per_contour_node.erase(it_sc);
+
+            if (use_tn)
+                it_tn = tempnorm_pairwises_per_contour_node.erase(it_tn);
+
+            if (use_tn)
+                it_ta = tempangle_pairwises_per_contour_node.erase(it_ta);
+
+            if (use_gt)
+                it_gt = green_theorem_pairwises.erase(it_gt);
+        }
+        else
+        {
+            ++it_rm;
+
+            if (use_du)
+                ++it_du;
+
+            if (use_tn)
+                ++it_pa;
+
+            if (use_tn)
+                ++it_pn;
+
+            if (use_sc)
+                ++it_sc;
+
+            if (use_tn)
+                ++it_tn;
+
+            if (use_tn)
+                ++it_ta;
+
+            if (use_gt)
+                ++it_gt;
+ 
