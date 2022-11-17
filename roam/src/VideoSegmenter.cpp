@@ -1185,4 +1185,124 @@ void VideoSegmenter::ContourElementsHelper::PruneContourElements(const std::vect
 
             if (use_gt)
                 ++it_gt;
- 
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------------
+void VideoSegmenter::Params::Read(cv::FileStorage &fs)
+// -----------------------------------------------------------------------------------
+{
+    int buffer;
+
+    if(!fs["label_space_side"].empty())
+    {
+        fs["label_space_side"] >> buffer;
+        this->label_space_side = buffer;
+    }
+
+    if(!fs["use_gradients_unary"].empty())
+        fs["use_gradients_unary"] >> this->use_gradients_unary;
+
+    if(!fs["grad_type"].empty())
+    {
+        fs["grad_type"] >> buffer;
+        this->grad_type = static_cast<GradientUnary::GradType>(buffer);
+    }
+
+    if (!fs["use_norm_pairwise"].empty())
+        fs["use_norm_pairwise"] >> this->use_norm_pairwise;
+
+    if (!fs["norm_type"].empty())
+    {
+        fs["norm_type"] >> buffer;
+        this->norm_type = static_cast<NormPairwise::NormType>(buffer);
+    }
+
+    if (!fs["norm_weight"].empty())
+        fs["norm_weight"] >> this->norm_weight;
+
+    if (!fs["use_temp_norm_pairwise"].empty())
+        fs["use_temp_norm_pairwise"] >> this->use_temp_norm_pairwise;
+
+    if (!fs["temp_norm_weight"].empty())
+        fs["temp_norm_weight"] >> this->temp_norm_weight;
+
+    if (!fs["temp_angle_weight"].empty())
+        fs["temp_angle_weight"] >> this->temp_angle_weight;
+
+    if(!fs["use_snapcut_pairwise"].empty())
+        fs["use_snapcut_pairwise"] >> this->use_snapcut_pairwise;
+
+    if(!fs["snapcut_region_height"].empty())
+        fs["snapcut_region_height"] >> this->snapcut_region_height;
+
+    if(!fs["snapcut_sigma_color"].empty())
+        fs["snapcut_sigma_color"] >> this->snapcut_sigma_color;
+
+    if(!fs["snapcut_number_clusters"].empty())
+        fs["snapcut_number_clusters"] >> this->snapcut_number_clusters;
+
+    if(!fs["snapcut_weight"].empty())
+        fs["snapcut_weight"] >> this->snapcut_weight;
+
+    if (!fs["use_landmarks"].empty())
+       fs["use_landmarks"] >> this->use_landmarks;
+
+    if (!fs["max_number_landmarks"].empty())
+        fs["max_number_landmarks"] >> this->max_number_landmarks;
+
+    if (!fs["landmark_max_area_overlap"].empty())
+        fs["landmark_max_area_overlap"] >> this->landmark_max_area_overlap;
+
+    if (!fs["landmark_min_area"].empty())
+        fs["landmark_min_area"] >> this->landmark_min_area;
+
+    if (!fs["landmark_min_response"].empty())
+        fs["landmark_min_response"] >> this->landmark_min_response;
+
+    if (!fs["landmark_pairwise_weight"].empty())
+        fs["landmark_pairwise_weight"] >> this->landmark_pairwise_weight;
+
+    if (!fs["landmark_to_node_weight"].empty())
+        fs["landmark_to_node_weight"] >> this->landmark_to_node_weight;
+
+    if (!fs["landmark_to_node_radius"].empty())
+        fs["landmark_to_node_radius"] >> this->landmark_to_node_radius;
+
+    if (!fs["landmarks_searchspace_side"].empty())
+        fs["landmarks_searchspace_side"] >> this->landmarks_searchspace_side;
+
+    if (!fs["use_gradient_pairwise"].empty())
+        fs["use_gradient_pairwise"] >> this->use_gradient_pairwise;
+
+    if (!fs["gradient_pairwise_weight"].empty())
+        fs["gradient_pairwise_weight"] >> this->gradient_pairwise_weight;
+
+    if (!fs["warper_type"].empty())
+    {
+        fs["warper_type"] >> buffer;
+        this->warper_type = static_cast<WarpType>(buffer);
+    }
+
+    if (!fs["use_green_theorem_term"].empty())
+       fs["use_green_theorem_term"] >> this->use_green_theorem_term;
+
+    if (!fs["green_theorem_weight"].empty())
+       fs["green_theorem_weight"] >> this->green_theorem_weight;
+
+    if (!fs["use_graphcut_term"].empty())
+       fs["use_graphcut_term"] >> this->use_graphcut_term;
+
+    if (!fs["reparametrization_failsafe"].empty())
+        fs["reparametrization_failsafe"] >> this->reparametrization_failsafe;
+}
+
+// -----------------------------------------------------------------------------------
+void VideoSegmenter::Params::Write(cv::FileStorage &fs) const
+// -----------------------------------------------------------------------------------
+{
+    fs << "label_space_side" << static_cast<int>(this->label_space_side);
+
+    fs << "use_gradients_unary" << this->use_gradients_unary;
+    fs << "gaussian_smoothing_facto
