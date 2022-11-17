@@ -984,4 +984,73 @@ void VideoSegmenter::automaticReparametrization()
                 positive_orientation = pos_distance < neg_distance ? true : false;
             }
 
-            if(toRemove[min_id
+            if(toRemove[min_id])
+                min_id = std::max(min_id - 1, 0);
+
+            proposed_contour->PruneNodes(toRemove);
+            proposed_ce.PruneContourElements(toRemove, params.use_landmarks, params.use_snapcut_pairwise,
+                                             params.use_temp_norm_pairwise, params.use_green_theorem_term);
+
+            proposed_nodes_ptrs =  createVectorOfPointersFromList(proposed_nodes);
+
+            const FLOAT_TYPE step_size = 5.f;
+            // add new nodes
+            // A small number of nodes (and >0): Bigger proposals slow down too much the execution
+            if(blob_add.size() > 0 && blob_add.size()<next_contour.size()/3 && blob_remove.size()<next_contour.size()/4 && blob_remove.size()>0)
+            {
+                size_t iter = 0;
+                if(positive_orientation)
+                    for(std::vector<cv::Point>::const_iterator it = blob_add.begin(); it != blob_add.end(); ++it)
+                    {
+                        const cv::Point &prev = proposed_nodes_ptrs[min_id + iter]->GetCoordinates();
+                        const cv::Point &curr = *it;
+                        if(std::sqrt(static_cast<FLOAT_TYPE>((prev.x - curr.x)*(prev.x - curr.x) + (prev.y - curr.y)*(prev.y - curr.y))) > step_size)
+                        {
+                            size_t added_node_idx = proposed_contour->AddNode(*it, min_id + static_cast<int>(iter)); // check this (adding in the right place?)
+                            proposed_nodes_ptrs =  createVectorOfPointersFromList(proposed_nodes);
+                            auto it_node = std::next(proposed_contour->contour_nodes.begin(), added_node_idx);
+                            auto it_next = std::next(it_node, 1);
+
+                            if (it_next!=--proposed_contour->contour_nodes.end())
+                                reinitializeNode(*it_node, *it_next, static_cast<int>(added_node_idx - 1), static_cast<int>(added_node_idx), proposed_ce);
+                            else
+                                reinitializeNode(*it_node, *proposed_contour->contour_nodes.begin(), static_cast<int>(added_node_idx - 1), 0, proposed_ce);
+
+                            ++iter;
+                        }
+                    }
+                else 
+                    for(std::vector<cv::Point>::const_reverse_iterator it = blob_add.rbegin(); it != blob_add.rend(); ++it)
+                    {
+                        const cv::Point &prev = proposed_nodes_ptrs[min_id + iter]->GetCoordinates();
+                        const cv::Point &curr = *it;
+                        if(std::sqrt(static_cast<FLOAT_TYPE>((prev.x - curr.x)*(prev.x - curr.x) + (prev.y - curr.y)*(prev.y - curr.y))) >  step_size)
+                        {
+                            size_t added_node_idx = proposed_contour->AddNode(*it, min_id + static_cast<int>(iter));
+                            proposed_nodes_ptrs =  createVectorOfPointersFromList(proposed_nodes);
+
+                            auto it_node = std::next(proposed_contour->contour_nodes.begin(), added_node_idx);
+                            auto it_next = std::next(it_node, 1);
+
+                            if (it_next!=--proposed_contour->contour_nodes.end())
+                                reinitializeNode(*it_node, *it_next, static_cast<int>(added_node_idx - 1), static_cast<int>(added_node_idx), proposed_ce);
+                            else
+                                reinitializeNode(*it_node, *proposed_contour->contour_nodes.begin(), static_cast<int>(added_node_idx - 1), 0, proposed_ce);
+
+                            ++iter;
+                        }
+                    }
+
+                if(proposed_nodes.size() < 50)
+                    continue;
+
+
+                // evaluate energy...
+                const FLOAT_TYPE proposed_energy = proposed_contour->GetTotalContourCost(
+                                        params.snapcut_region_height, params.snapcut_sigma_color,
+                                        params.snapcut_weight, next_image.rows, next_image.cols,
+                                        this->params.use_snapcut_pairwise );
+
+                if(proposed_energy < (1.f-this->params.reparametrization_failsafe)*this->current_contour_cost)
+                {
+                    this->contour =
