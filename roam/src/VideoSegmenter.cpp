@@ -899,4 +899,89 @@ void VideoSegmenter::automaticReparametrization()
 
     cv::Mat gc_segmented;
 
-    bool 
+    bool keep_checking_for_proposals = true;
+
+    int iter_while = 0;
+    const int MAX_REPARAMETRIZATION_ITERS = 1;
+    while (keep_checking_for_proposals && iter_while<MAX_REPARAMETRIZATION_ITERS)
+    {
+        keep_checking_for_proposals = false; // if I accept a proposal, I'll set it somewhere inside the loop
+
+        if (!this->graphcut.Initialized())
+            this->graphcut = GC_Energy(GC_Energy::Params(1,50.f,50.f,1000.f));
+
+        std::vector<ROAM::ProposalsBox> proposals;
+        cv::Mat contour_lmap = contour->GenerateLikelihoodMap(this->next_image);
+
+        const int slack = 50;
+        cv::Rect range = FindContourRange(next_contour, slack) &
+                cv::Rect(0, 0, this->next_image.cols, this->next_image.rows);
+        if (!this->params.use_green_theorem_term) //!> use internal model (initialized and updated inside function
+        {
+            gc_segmented = this->graphcut.Segment(this->next_image, this->frame_mask,
+                                                  next_contour, contour_lmap, GlobalModel(),
+                                                  range);
+
+        }
+        else //!> use green theorem model (avoids double computation)
+        {
+
+            gc_segmented = this->graphcut.Segment(this->next_image, this->frame_mask,
+                                                  next_contour, contour_lmap, this->fb_model, range);
+        }
+
+        // At this point we have the two segmentation masks:
+        // From GCUT: gc_segmented, from ROAM: frame_mask
+        // Find contour of largest blob in gc_segmented and the blob itself
+        std::vector<cv::Point> gc_contour = ContourFromMask(gc_segmented);
+        cv::Mat gc_largest_blob;
+        contourToMask(gc_contour, gc_largest_blob, gc_segmented.size());
+
+        findDifferences(gc_segmented, gc_contour, gc_largest_blob,
+                        next_contour, this->frame_mask,
+                        proposals);
+
+        if(proposals.size() == 0)
+        {
+            LOG_INFO("VideoSegmenter::AutomaticReparametrization() - No proposals. ");
+            return;
+        }
+
+        // sort and start from the largest one
+        std::sort(proposals.begin(), proposals.end(), [](ProposalsBox const& a, ProposalsBox const& b) { return a.mass > b.mass; });
+
+        // propose move and compute new energy
+        for(size_t i = 0; i < proposals.size(); ++i)
+        {
+            const std::set<size_t> &blob_remove = proposals[i].remove_nodes;
+            const std::vector<cv::Point> &blob_add = proposals[i].add_nodes;
+
+            std::vector<bool> toRemove(next_contour.size(), false);
+            size_t n_nodes_to_remove = 0;
+            for(std::set<size_t>::const_iterator it = blob_remove.begin(); it != blob_remove.end(); ++it)
+            {
+                toRemove[*it] = true;
+                n_nodes_to_remove++;
+            }
+
+            if(n_nodes_to_remove == toRemove.size())
+                continue; // not goona start removing if the proposal says i need to remove everuthing
+
+            std::shared_ptr<ClosedContour> proposed_contour = std::make_shared<ClosedContour>(*(this->contour));
+            ContourElementsHelper proposed_ce = this->contour_elements;
+            std::list<Node> &proposed_nodes = proposed_contour->contour_nodes;
+
+            std::vector<Node*> proposed_nodes_ptrs = createVectorOfPointersFromList(proposed_nodes);
+
+            int min_id = static_cast<int>(proposals[i].min_max_ids.first);
+            const int max_id = static_cast<int>(proposals[i].min_max_ids.second);
+
+            bool positive_orientation = true; 
+            if(blob_add.size() > 0)
+            {
+                const FLOAT_TYPE pos_distance = static_cast<FLOAT_TYPE>(cv::norm(blob_add[0] - proposed_nodes_ptrs[min_id]->GetCoordinates()) + cv::norm(blob_add[blob_add.size() - 1] - proposed_nodes_ptrs[max_id]->GetCoordinates()));
+                const FLOAT_TYPE neg_distance = static_cast<FLOAT_TYPE>(cv::norm(blob_add[0] - proposed_nodes_ptrs[max_id]->GetCoordinates()) + cv::norm(blob_add[blob_add.size() - 1] - proposed_nodes_ptrs[min_id]->GetCoordinates()));
+                positive_orientation = pos_distance < neg_distance ? true : false;
+            }
+
+            if(toRemove[min_id
