@@ -1305,4 +1305,87 @@ void VideoSegmenter::Params::Write(cv::FileStorage &fs) const
     fs << "label_space_side" << static_cast<int>(this->label_space_side);
 
     fs << "use_gradients_unary" << this->use_gradients_unary;
-    fs << "gaussian_smoothing_facto
+    fs << "gaussian_smoothing_factor" << this->gaussian_smoothing_factor;
+    fs << "gradients_weight" << this->gradients_weight;
+    fs << "grad_kernel_size" << this->grad_kernel_size;
+    fs << "grad_type" << static_cast<int>(this->grad_type);
+
+    fs << "use_norm_pairwise" << this->use_norm_pairwise;
+    fs << "norm_weight" << this->norm_weight;
+    fs << "norm_type" << static_cast<int>(this->norm_type);
+
+    fs << "use_temp_norm_pairwise" << this->use_temp_norm_pairwise;
+    fs << "temp_angle_weight" << this->temp_angle_weight;
+    fs << "temp_norm_weight" << this->temp_norm_weight;
+
+    fs << "use_snapcut_pairwise" << this->use_snapcut_pairwise;
+    fs << "snapcut_region_height" << this->snapcut_region_height;
+    fs << "snapcut_sigma_color" << this->snapcut_sigma_color;
+    fs << "snapcut_weight" << this->snapcut_weight;
+    fs << "snapcut_number_clusters" << this->snapcut_number_clusters;
+
+    fs << "use_landmarks" << this->use_landmarks;
+    fs << "max_number_landmarks" << this->max_number_landmarks;
+    fs << "landmark_max_area_overlap" << this->landmark_max_area_overlap;
+    fs << "landmark_min_area" << this->landmark_min_area;
+    fs << "landmark_min_response" << this->landmark_min_response;
+    fs << "landmark_pairwise_weight" << this->landmark_pairwise_weight;
+    fs << "landmark_to_node_weight" << this->landmark_to_node_weight;
+    fs << "landmark_to_node_radius" << this->landmark_to_node_radius;
+    fs << "landmarks_searchspace_side" << this->landmarks_searchspace_side;
+
+    fs << "use_gradient_pairwise" << this->use_gradient_pairwise;
+    fs << "gradient_pairwise_weight" << this->gradient_pairwise_weight;
+
+    fs << "warper_type" << this->warper_type;
+
+    fs << "use_green_theorem_term" << this->use_green_theorem_term;
+    fs << "green_theorem_weight" << this->green_theorem_weight;
+    fs << "use_graphcut_term" << this->use_graphcut_term;
+    fs << "reparametrization_failsafe" << this->reparametrization_failsafe;
+}
+
+// -----------------------------------------------------------------------------------
+void VideoSegmenter::Params::Print() const
+// -----------------------------------------------------------------------------------
+{
+    LOG_INFO("");
+    LOG_INFO( "======================= USED PARAMETERS ========================" );
+    LOG_INFO( "label_space_side: " << static_cast<int>(this->label_space_side) );
+
+    LOG_INFO( "use_gradients_unary: " << this->use_gradients_unary );
+    LOG_INFO( "gaussian_smoothing_factor: " << this->gaussian_smoothing_factor );
+    LOG_INFO( "gradients_weight: " << this->gradients_weight );
+    LOG_INFO( "grad_kernel_size: " << this->grad_kernel_size );
+    LOG_INFO( "grad_type: " << static_cast<int>(this->grad_type) );
+
+    LOG_INFO( "use_norm_pairwise: " << this->use_norm_pairwise );
+    LOG_INFO( "norm_weight: " << this->norm_weight );
+    LOG_INFO( "norm_type: " << static_cast<int>(this->norm_type) );
+
+    LOG_INFO( "use_temp_norm_pairwise: " << this->use_temp_norm_pairwise );
+    LOG_INFO( "temp_angle_weight: " << this->temp_angle_weight );
+    LOG_INFO( "temp_norm_weight: " << this->temp_norm_weight );
+
+    LOG_INFO( "use_snapcut_pairwise: " << this->use_snapcut_pairwise );
+    LOG_INFO( "snapcut_region_height: " << this->snapcut_region_height );
+    LOG_INFO( "snapcut_sigma_color: " << this->snapcut_sigma_color );
+    LOG_INFO( "snapcut_weight: " << this->snapcut_weight );
+    LOG_INFO( "snapcut_number_clusters: " << this->snapcut_number_clusters );
+
+    LOG_INFO( "use_landmarks: " << this->use_landmarks );
+    LOG_INFO( "max_number_landmarks: " << this->max_number_landmarks );
+    LOG_INFO( "landmark_max_area_overlap: " << this->landmark_max_area_overlap );
+    LOG_INFO( "landmark_min_area: " << this->landmark_min_area );
+    LOG_INFO( "landmark_min_response: " << this->landmark_min_response );
+    LOG_INFO( "landmark_pairwise_weight: " << this->landmark_pairwise_weight );
+    LOG_INFO( "landmark_to_node_weight: " << this->landmark_to_node_weight );
+    LOG_INFO( "landmark_to_node_radius: " << this->landmark_to_node_radius );
+    LOG_INFO( "landmarks_searchspace_side: " << this->landmarks_searchspace_side );
+
+    LOG_INFO( "use_gradient_pairwise: " << this->use_gradient_pairwise );
+    LOG_INFO( "gradient_pairwise_weight: " << this->gradient_pairwise_weight );
+
+    LOG_INFO( "warper_type: " << this->warper_type );
+
+    LOG_INFO( "use_green_theorem_term: 
