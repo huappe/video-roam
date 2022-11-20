@@ -1388,4 +1388,11 @@ void VideoSegmenter::Params::Print() const
 
     LOG_INFO( "warper_type: " << this->warper_type );
 
-    LOG_INFO( "use_green_theorem_term: 
+    LOG_INFO( "use_green_theorem_term: " << this->use_green_theorem_term );
+    LOG_INFO( "green_theorem_weight: " << this->green_theorem_weight );
+    LOG_INFO( "use_graphcut_term: " << this->use_graphcut_term );
+    LOG_INFO( "reparametrization_failsafe: " << this->reparametrization_failsafe );
+
+    LOG_INFO( "================================================================" );
+    LOG_INFO("");
+}
