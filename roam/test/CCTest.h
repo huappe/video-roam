@@ -93,4 +93,12 @@ TEST(CCTest, ClosedContour_FollowL2Norm)
     {
         contour.BuildDPTable();
         contour.RunDPInference();
-    
+        contour.ApplyMoves();
+    }
+
+    for (auto itc=contour_nodes.begin(); itc!=--contour_nodes.end(); ++itc)
+    {
+        ASSERT_EQ(itc->GetCoordinates().x, itc->GetCoordinates().y);
+        ASSERT_EQ(itc->GetCoordinates().x, std::next(itc,1)->GetCoordinates().x);
+    }
+}
