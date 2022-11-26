@@ -124,4 +124,42 @@ TEST(DPTest, TreeDP)
 
 
     roam::DPTableUnaries t1 = { {1.0f, 0.0f}, {0.0f, 0.0f} };
-    roam::DPTable
+    roam::DPTableUnaries t2 = { {0.0f, 0.0f}, {0.0f, 0.0f}, {0.0f, 0.0f} };
+    roam::DPTableUnaries t3 = { {0.0f, 0.0f}, {0.0f, 0.0f}, {0.0f, 0.0f}, {0.0f, 0.0f} };
+
+    roam::DPTablePairwises p1 = { { {.0f,1.5f},{.0f,1.5f} },
+                                  { {.0f,.0f},{.0f,.0f} } };
+    roam::DPTablePairwises p2 = { { {.0f,.0f},{.0f,.0f} },
+                                  { {.0f,.0f},{.0f,.0f} },
+                                  { {.0f,.0f},{.0f,.0f} } };
+    roam::DPTablePairwises p3 = { { {.0f,.0f},{.0f,.0f} },
+                                  { {.0f,.0f},{.0f,.0f} },
+                                  { {.0f,.0f},{.0f,.0f} },
+                                  { {.0f,.0f},{.0f,.0f} } };
+
+    parenthood.push_back(0);
+    child_unary_costs.push_back( t1 );
+
+    parenthood.push_back(1);
+    child_unary_costs.push_back( t2 );
+
+    parenthood.push_back(2);
+    child_unary_costs.push_back( t3 );
+
+    child_pairwise_costs.push_back(p1);
+    child_pairwise_costs.push_back(p2);
+    child_pairwise_costs.push_back(p3);
+
+
+    roam::TreeDP dp_tree;
+    FLOAT_TYPE min_cost;
+
+    std::vector<roam::label> results = dp_tree.Minimize(dp_table, min_cost);
+
+    for (auto i:results)
+        std::cerr<<" "<<i<<" ";
+
+    std::cerr<<std::endl;
+    std::cerr<<"MIN COST = "<<min_cost<<std::endl;
+
+}
