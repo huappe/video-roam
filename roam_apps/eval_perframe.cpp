@@ -76,14 +76,22 @@ int main(int argc, char *argv[])
     /////////////////////////////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////// Processing ///////////////////////////////////////////////
     /////////////////////////////////////////////////////////////////////////////////////////////////////
-    ROAM::ConfusionMatrix cm_operator(2);
+    ///
+    ///
 
-    //#pragma omp parallel for
+    std::vector<double> ious;
+    std::vector<double> accs;
+    std::vector<double> f_1s;
+    std::vector<double> pres;
+    std::vector<double> recs;
+
     for(auto file_index = 0; file_index < list_of_gtfiles.size() - 1; ++file_index)
     {
 
         cv::Mat gt_frame = cv::imread(list_of_gtfiles[file_index],  cv::IMREAD_GRAYSCALE)/255;
         cv::Mat re_frame = cv::imread(list_of_resfiles[file_index], cv::IMREAD_GRAYSCALE)/255;
+
+        ROAM::ConfusionMatrix cm_operator(2);
 
         std::vector<int> gt_values;
         std::vector<int> re_values;
@@ -91,19 +99,27 @@ int main(int argc, char *argv[])
         MatToVector<int>(re_frame, re_values);
 
         cm_operator.Accumulate(gt_values, re_values);
+
+        double iou = cm_operator.IoU(1);
+        double acc = cm_operator.Accuracy();
+        double f_1 = cm_operator.F1(1);
+        double pre = cm_operator.Precision(1);
+        double rec = cm_operator.Recall(1);
+
+        ious.push_back(iou);
+        accs.push_back(acc);
+        f_1s.push_back(f_1);
+        pres.push_back(pre);
+        recs.push_back(rec);
     }
-    double iou = cm_operator.IoU(1);
-    double acc = cm_operator.Accuracy();
-    double f_1 = cm_operator.F1(1);
-    double pre = cm_operator.Precision(1);
-    double rec = cm_operator.Recall(1);
+
 
     cv::FileStorage output_fs(output_filename, cv::FileStorage::WRITE);
-    output_fs << "mean_intersection_over_union" << iou;
-    output_fs << "mean_accuracy" << acc;
-    output_fs << "mean_f1score" << f_1;
-    output_fs << "mean_precision" << pre;
-    output_fs << "mean_recall" << rec;
+    output_fs << "mean_intersection_over_union" << ious;
+    output_fs << "mean_accuracy" << accs;
+    output_fs << "mean_f1score" << f_1s;
+    output_fs << "mean_precision" << pres;
+    output_fs << "mean_recall" << recs;
 
     return 0;
 }
