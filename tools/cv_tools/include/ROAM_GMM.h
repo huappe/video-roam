@@ -108,4 +108,94 @@ struct GMMModel
     }
 
     // -----------------------------------------------------------------------------------
-    int initia
+    int initializeMixture(const cv::Mat &patch, const cv::Mat &mask, const Parameters &parameters)
+    // -----------------------------------------------------------------------------------
+    {
+        this->params = parameters;
+        const int res = initializeMixture(patch, mask);
+
+        return res;
+    }
+
+    // -----------------------------------------------------------------------------------
+    int updateMixture(const cv::Mat &patch, const cv::Mat &mask,
+        const std::vector<MixtureComponent> &other_gmm = std::vector<MixtureComponent>())
+    // -----------------------------------------------------------------------------------
+    {
+        // approx corresponds to miksik et al., icra 2011
+
+        // -----------------------------------------------------------------------------------
+        // extract new clusters
+        std::vector<MixtureComponent> new_clusters = getMixture(patch, mask, params.update_k, params.update_min_fraction);
+
+        // -----------------------------------------------------------------------------------
+        // prune new clusters => they won't contain clusters similar to any in other_gmm
+        {
+            const size_t n_components_other = other_gmm.size();
+            std::vector<MixtureComponent>::iterator component = new_clusters.begin();
+            while(component != new_clusters.end())
+            {
+                // throw away similar clusters
+                bool deleted = false;
+                for(size_t id = 0; id < n_components_other; ++id)
+                {
+                    const MixtureComponent &other_component = other_gmm[id];
+
+                    const cv::Mat i_combined_covariance = (other_component.covariance + component->covariance).inv();
+
+                    const FLOAT_TYPE similarity = static_cast<FLOAT_TYPE>(cv::Mahalanobis(other_component.mean, component->mean, i_combined_covariance));
+                    const FLOAT_TYPE similarity_sq = std::pow(similarity, 2);
+
+                    if(similarity_sq < params.d_similar_skip) // 1.5
+                    {
+                        component = new_clusters.erase(component);
+                        deleted = true;
+                        break;
+                    }
+                }
+
+                if(deleted)
+                    continue;
+                else
+                    component++;
+            }
+        }
+
+        // -----------------------------------------------------------------------------------
+        // update the most promissing 
+        for(size_t id_new = 0; id_new < new_clusters.size(); ++id_new)
+        {
+            const MixtureComponent &new_mixture = new_clusters[id_new];
+
+            FLOAT_TYPE min_distance = std::numeric_limits<FLOAT_TYPE>::infinity();
+            size_t min_id = 0;
+
+            // compute cluster similarity
+            //
+            // using n_components instead of "gmm.size()" is correct 
+            // since we want overlaps only with the original clusters, not added in a current iteration
+            for(size_t id_orig = 0; id_orig < n_components; ++id_orig)
+            {
+                const MixtureComponent &orig_mixture = gmm[id_orig];
+
+                const cv::Mat i_combined_covariance = (orig_mixture.covariance + new_mixture.covariance).inv();
+
+                const FLOAT_TYPE similarity = static_cast<FLOAT_TYPE>(cv::Mahalanobis(orig_mixture.mean, new_mixture.mean, i_combined_covariance));
+                const FLOAT_TYPE similarity_sq = std::pow(similarity, 2);
+
+                if(similarity_sq < min_distance)
+                {
+                    min_distance = similarity_sq;
+                    min_id = id_orig;
+                }
+            }
+
+            // do we have a similar cluster?
+            if(min_distance < params.d_similar_merge) // 0.1
+            {
+                MixtureComponent &orig_mixture = gmm[min_id];
+
+                const size_t normalizer = orig_mixture.mass + new_mixture.mass;
+
+                orig_mixture.mean = (static_cast<float>(orig_mixture.mass) * orig_mixture.mean + static_cast<float>(new_mixture.mass) * new_mixture.mean) / static_cast<FLOAT_TYPE>(normalizer);
+                orig_mixture.covariance = (static_cast<float>(orig_mixture.mass) * orig_mixture.covariance + static_cast<float>(new_mixture.mass) * new_mixture.cov
