@@ -198,4 +198,123 @@ struct GMMModel
                 const size_t normalizer = orig_mixture.mass + new_mixture.mass;
 
                 orig_mixture.mean = (static_cast<float>(orig_mixture.mass) * orig_mixture.mean + static_cast<float>(new_mixture.mass) * new_mixture.mean) / static_cast<FLOAT_TYPE>(normalizer);
-                orig_mixture.covariance = (static_cast<float>(orig_mixture.mass) * orig_mixture.covariance + static_cast<float>(new_mixture.mass) * new_mixture.cov
+                orig_mixture.covariance = (static_cast<float>(orig_mixture.mass) * orig_mixture.covariance + static_cast<float>(new_mixture.mass) * new_mixture.covariance) / static_cast<FLOAT_TYPE>(normalizer);
+                orig_mixture.iCovariance = orig_mixture.covariance.inv();
+                orig_mixture.mass = normalizer;
+            }
+            else // we need to introduce a new component
+            {
+                gmm.push_back(new_mixture);
+            }
+        }
+
+        // -----------------------------------------------------------------------------------
+        // decay, awu and discarding
+        size_t total_mass = 0;
+        // const size_t n_components_other = other_gmm.size();
+        std::vector<MixtureComponent>::iterator component = gmm.begin();
+        while(component != gmm.end())
+        {
+            // anti-windup
+            component->mass = std::min(component->mass, params.awu);
+
+            // decay
+            component->mass = static_cast<size_t>(component->mass * params.decay_factor);
+
+            // discard small components
+            if(component->mass < params.discard_threshold)
+            {
+                component = gmm.erase(component);
+                continue;
+            }
+
+            // current mass to update gmm weights
+            total_mass += component->mass;
+
+            // and iterate
+            component++;
+        }
+
+        // -----------------------------------------------------------------------------------
+        // update w
+        for(size_t id_orig = 0; id_orig < gmm.size(); ++id_orig)
+            gmm[id_orig].weight = gmm[id_orig].mass / static_cast<FLOAT_TYPE>(total_mass);
+
+        // update number of components
+        n_components = gmm.size();
+
+        if(gmm.size() == 0)
+        {
+            initialized = false;
+            return -1;
+        }
+
+        initialized = true;
+
+        return 0;
+    }
+
+    // -----------------------------------------------------------------------------------
+    int updateMixture(const cv::Mat &patch, const cv::Mat &mask, const Parameters &parameters,
+        const std::vector<MixtureComponent> &other_gmm = std::vector<MixtureComponent>())
+    // -----------------------------------------------------------------------------------
+    {
+        this->params = parameters;
+        return updateMixture(patch, mask, other_gmm);
+    }
+
+    // -----------------------------------------------------------------------------------
+    FLOAT_TYPE getMahalanobisDistance(const cv::Vec3f &color) const
+    // -----------------------------------------------------------------------------------
+    {
+        if(!initialized)
+            throw std::logic_error("GMM needs to be initialized firts");
+
+        float min_distance = std::numeric_limits<float>::infinity();
+
+        for(size_t i = 0; i < n_components; ++i)
+        {
+            const MixtureComponent &component = gmm[i];
+
+            const cv::Mat &inv = component.iCovariance;
+            const FLOAT_TYPE distance = static_cast<FLOAT_TYPE>(cv::Mahalanobis(color, component.mean, inv));
+            if(distance < min_distance)
+                min_distance = distance;
+        }
+
+        return min_distance;
+    }
+
+    // -----------------------------------------------------------------------------------
+    cv::Mat getMahalanobisDistance(const cv::Mat &patch) const
+    // -----------------------------------------------------------------------------------
+    {
+        if(!initialized)
+            throw std::logic_error("GMM needs to be initialized firts");
+
+        cv::Mat output(patch.rows, patch.cols, CV_32FC1);
+
+        cv::Mat patch_f;
+        patch.convertTo(patch_f, CV_32FC1);
+
+        for(int row = 0; row < patch.rows; ++row)
+        for(int col = 0; col < patch.cols; ++col)
+        {
+            const cv::Vec3f &color = patch_f.at<cv::Vec3f>(row, col);
+            const float distance = getMahalanobisDistance(color);
+
+            output.at<float>(row, col) = distance;
+        }
+
+        return output;
+    }
+
+    /// evaluates gmm probability
+    // -----------------------------------------------------------------------------------
+    FLOAT_TYPE getLikelihood(const cv::Vec3f &color) const
+    // -----------------------------------------------------------------------------------
+    {
+        if(!initialized)
+            throw std::logic_error("GMM needs to be initialized first");
+
+        FLOAT_TYPE p
