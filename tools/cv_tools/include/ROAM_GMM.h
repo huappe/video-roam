@@ -317,4 +317,114 @@ struct GMMModel
         if(!initialized)
             throw std::logic_error("GMM needs to be initialized first");
 
-        FLOAT_TYPE p
+        FLOAT_TYPE probability = 0;
+
+        for(size_t i = 0; i < n_components; ++i)
+        {
+            const MixtureComponent &component = gmm[i];
+
+            const cv::Mat &cov = component.covariance;
+            const cv::Mat &inv = component.iCovariance;
+            const FLOAT_TYPE distance = static_cast<FLOAT_TYPE>(cv::Mahalanobis(color, component.mean, inv));
+
+            const FLOAT_TYPE frac = static_cast<FLOAT_TYPE>(1.0 / (std::sqrt(std::pow(2 * M_PI, 3) * cv::determinant(cov))));
+            probability += component.weight * frac * std::exp(-0.5f * std::pow(distance, 2));
+        }
+
+        return probability;
+    }
+
+    // -----------------------------------------------------------------------------------
+    cv::Mat getLikelihood(const cv::Mat &patch) const
+    // -----------------------------------------------------------------------------------
+    {
+        if(!initialized)
+            throw std::logic_error("GMM needs to be initialized firts");
+
+        cv::Mat output(patch.rows, patch.cols, CV_32FC1);
+        output.setTo(0.0);
+
+        cv::Mat patch_f;
+        patch.convertTo(patch_f, CV_32FC1);
+
+        std::vector<FLOAT_TYPE> fractions(gmm.size());
+        for(size_t i = 0; i < n_components; ++i)
+            fractions[i] = static_cast<FLOAT_TYPE>(gmm[i].weight * 1.0 / (std::sqrt(std::pow(2 * M_PI, 3) * cv::determinant(gmm[i].covariance))));
+
+        for(int row = 0; row < patch.rows; ++row)
+        {
+            const cv::Vec3f* patch_row_ptr = patch_f.ptr<cv::Vec3f>(row);
+            FLOAT_TYPE* outpt_row_ptr = output.ptr<FLOAT_TYPE>(row);
+
+            for(int col = 0; col < patch.cols; ++col)
+            {
+                const cv::Vec3f &color = patch_row_ptr[col];
+                const FLOAT_TYPE probability = getLikelihood(color, fractions);
+
+                outpt_row_ptr[col] = probability;
+            }
+        }
+
+        return output;
+    }
+
+    // -----------------------------------------------------------------------------------
+    const std::vector<MixtureComponent> & getGMMComponents() const
+    // -----------------------------------------------------------------------------------
+    {
+        return gmm;
+    }
+
+protected:
+    /// evaluates gmm likelihood with precomputed fractional parts
+    // -----------------------------------------------------------------------------------
+    FLOAT_TYPE getLikelihood(const cv::Vec3f &color, std::vector<FLOAT_TYPE> &fractions) const
+    // -----------------------------------------------------------------------------------
+    {
+        if(!initialized)
+            throw std::logic_error("GMM needs to be initialized firts");
+
+        FLOAT_TYPE probability = 0;
+
+        for(size_t i = 0; i < n_components; ++i)
+        {
+            const MixtureComponent &component = gmm[i];
+
+            // const cv::Mat &cov = component.covariance;
+            const cv::Mat &inv = component.iCovariance;
+            const FLOAT_TYPE distance = static_cast<FLOAT_TYPE>(cv::Mahalanobis(color, component.mean, inv));
+
+            const FLOAT_TYPE &frac = fractions[i];
+            probability += frac * std::exp(-0.5f * std::pow(distance, 2));
+        }
+
+        return probability;
+    }
+
+    // -----------------------------------------------------------------------------------
+    std::vector<MixtureComponent> getMixture(const cv::Mat &patch, const cv::Mat &mask,
+        const size_t k = 3, const FLOAT_TYPE minFraction = 0.1) const
+    // -----------------------------------------------------------------------------------
+    {
+        assert(mask.type() == CV_8UC1);
+
+        std::vector<MixtureComponent> mixture;
+
+        const size_t &n_clusters = k;
+        mixture.reserve(n_clusters);
+
+        cv::Mat patch_f;
+        patch.convertTo(patch_f, CV_32FC1);
+
+        std::vector<cv::Vec3f> tmp;
+        tmp.reserve(patch.total());
+
+        for(int y = 0; y < patch.rows; ++y)
+        for(int x = 0; x < patch.cols; ++x)
+        if(mask.at<uchar>(y, x) != 0) // uchar
+        {
+            const cv::Vec3f &sample = patch_f.at<cv::Vec3f>(y, x);
+            tmp.push_back(sample);
+        }
+
+        if(tmp.size() <= n_cluster
