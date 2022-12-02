@@ -427,4 +427,67 @@ protected:
             tmp.push_back(sample);
         }
 
-        if(tmp.size() <= n_cluster
+        if(tmp.size() <= n_clusters)
+            return mixture;
+
+        cv::Mat labels, centers;
+        const cv::Mat samples = cv::Mat(tmp).reshape(1);
+        const float n_pixels = static_cast<float>(tmp.size());
+
+        cv::kmeans(samples, static_cast<int>(n_clusters), labels, cv::TermCriteria(CV_TERMCRIT_ITER | CV_TERMCRIT_EPS, 10000, 0.0001),
+            static_cast<int>(params.attempts), cv::KMEANS_PP_CENTERS, centers);
+
+        size_t n_used_pixels = 0;
+
+        // extract covariance matrices and centers
+        for(size_t id = 0; id < n_clusters; ++id)
+        {
+            std::vector<cv::Vec3f> pts;
+            pts.reserve(labels.rows);
+
+            for(int pt = 0; pt < labels.rows; ++pt)
+            if(labels.at<int>(pt, 0) == id)
+            {
+                const cv::Vec3f &sample = samples.row(pt);
+                pts.push_back(sample);
+            }
+
+            // is cluster large enough?
+            if((pts.size() / static_cast<FLOAT_TYPE>(n_pixels)) < minFraction)
+                continue;
+
+            const cv::Mat cluster = cv::Mat(pts).reshape(1);
+
+            cv::Mat covariance;
+            const cv::Mat mean = centers.row(static_cast<int>(id));
+
+            //cv::calcCovarMatrix(cluster, covariance, mean, CV_COVAR_NORMAL|CV_COVAR_ROWS|CV_COVAR_USE_AVG, CV_32FC1);
+            cv::calcCovarMatrix(cluster, covariance, mean, CV_COVAR_SCALE | CV_COVAR_NORMAL | CV_COVAR_ROWS | CV_COVAR_USE_AVG, CV_32FC1);
+
+            MixtureComponent component;
+            component.mean = mean;
+            component.covariance = covariance + params.noise_factor * cv::Mat::eye(3, 3, CV_32FC1);
+            component.iCovariance = component.covariance.inv();
+            //component.weight = pts.size() / n_pixels;
+            component.mass = pts.size();
+
+            mixture.push_back(component);
+            n_used_pixels += pts.size();
+        }
+
+        // compute weights
+        for(int i = 0; i < mixture.size(); i++)
+            mixture[i].weight = mixture[i].mass / static_cast<FLOAT_TYPE>(n_used_pixels);
+
+        return mixture;
+    }
+
+    std::vector<MixtureComponent> gmm;
+    size_t n_components;
+    Parameters params;
+
+public:
+    bool initialized;
+};
+
+}
