@@ -74,4 +74,94 @@ public:
         }
 
         Kernels kernel;
-        Features feature_type
+        Features feature_type;
+
+        FLOAT_TYPE interp_patch;
+        FLOAT_TYPE interp_alpha;
+        FLOAT_TYPE train_confidence;
+
+        FLOAT_TYPE lambda;	/// regularizer
+        FLOAT_TYPE target_sigma;
+
+        cv::Size min_displacement;
+        FLOAT_TYPE target_padding;
+        FLOAT_TYPE detection_padding;
+    };
+
+    // -----------------------------------------------------------------------------------
+    struct Model
+    // -----------------------------------------------------------------------------------
+    {
+        cv::Mat alpha_f;
+        cv::Mat x_f;
+    };
+
+    // -----------------------------------------------------------------------------------
+    struct Output
+    // -----------------------------------------------------------------------------------
+    {
+        cv::Mat patch_translation;			/// max output defines translation
+        cv::Mat patch_regression;			/// max output defines center object
+        cv::Mat img_regression;
+        cv::Rect orig_tracked_target;		/// original patch
+        cv::Rect orig_padded_target;
+        cv::Rect shifted_tracked_target;	/// added delta
+        cv::Rect shifted_padded_target;
+        cv::Point2i patch_center;
+        cv::Point2i orig_img_center;		/// orig
+        cv::Point2i shifted_img_center;		/// shifted
+        FLOAT_TYPE PSR;
+    };
+
+    // -----------------------------------------------------------------------------------
+    explicit KCF(const Parameters &parameters = Parameters())
+        : initialized_model(false), relative_sigma(-1), confidence(std::numeric_limits<FLOAT_TYPE>::infinity()), params(parameters)
+    // -----------------------------------------------------------------------------------
+    {
+    }
+
+    // -----------------------------------------------------------------------------------
+    // Methods
+    // -----------------------------------------------------------------------------------
+    cv::Rect Evaluate(const cv::Mat &img, Output &out, const cv::Rect &target = cv::Rect());
+    cv::Rect Evaluate(const cv::Mat &img, const cv::Rect &target = cv::Rect());
+    cv::Rect Track(const cv::Mat &img, Output &out);
+    void Update(const cv::Mat &img, const cv::Rect &target, const bool padded = false);
+    Output GetCurrentOutput() const;
+    cv::Mat GetRegressionMap() const;
+    // -----------------------------------------------------------------------------------
+    static cv::Rect adjustTarget(const cv::Point2i &delta, const cv::Rect &rect);
+    static cv::Rect adjustTarget(const cv::Point2i &orig_center, const cv::Point2i &max_response, const cv::Rect &rect);
+    static cv::Rect adjustTarget(const cv::Point2i &orig_center, const cv::Mat &patch, const cv::Rect &rect);
+
+    // -----------------------------------------------------------------------------------
+    cv::Size getTargetSize() const;
+    cv::Size getWindowSize() const;
+    cv::Rect getTrackedTarget() const;
+    cv::Rect getPaddedTarget() const;
+    cv::Point2i getCurrentReferencePoint() const;
+
+    /// Peak to Sidelobe Ratio (PSR) providing confidence as described in Bolme 2010
+    FLOAT_TYPE computePSR(const cv::Mat& response, const int half_window = 5) const;
+
+
+protected:
+
+    void init(const cv::Rect &target);
+    void train(const cv::Mat &img, const cv::Rect &target, const bool initialize = false);
+    void update(const Model &current, const FLOAT_TYPE interp_patch, const FLOAT_TYPE interp_alpha);
+
+    cv::Mat getSubwindow(const cv::Mat &img, const cv::Rect &rect) const;
+    cv::Mat putSubwindow(const cv::Size &img_size, const cv::Rect &rect, const cv::Mat &subpart) const;
+    cv::Mat swapTranslation2Pixels(const cv::Mat &translations) const;
+
+    cv::Mat getFeatures(const cv::Mat &img, const Features &ft_type, const cv::Mat &window = cv::Mat()) const;
+    cv::Mat getGrayFeatures(const cv::Mat &img) const;
+    cv::Mat getColourFeatures(const cv::Mat &img) const;
+
+    //cv::Mat getHannWindow(const cv::Size &sz);
+    cv::Mat getHannWindow(const cv::Size &sz, const cv::Size &target_sz = cv::Size()) const;
+    cv::Mat getGaussianShapedLabels(const cv::Size &sz, const FLOAT_TYPE sigma) const;
+
+    // we use nonunitary fft, unitarity is handled separately in kernels
+    cv::Mat nonunitaryFFT(c
