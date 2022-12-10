@@ -164,4 +164,33 @@ protected:
     cv::Mat getGaussianShapedLabels(const cv::Size &sz, const FLOAT_TYPE sigma) const;
 
     // we use nonunitary fft, unitarity is handled separately in kernels
-    cv::Mat nonunitaryFFT(c
+    cv::Mat nonunitaryFFT(const cv::Mat &mat) const;
+    cv::Mat nonunitaryIFFT(const cv::Mat &mat_f) const;
+
+    cv::Mat evaluateKernelCorrelation(const cv::Mat &a_f, const cv::Mat &b_f, const Kernels &type) const;
+    cv::Mat evaluateLinearKernel(const cv::Mat &a_f, const cv::Mat &b_f) const;
+    cv::Mat evaluateGaussianKernel(const cv::Mat &a_f, const cv::Mat &b_f) const;
+    cv::Mat evaluatePolynomialKernel(const cv::Mat &a_f, const cv::Mat &b_f) const;
+
+    cv::Mat specMultiplication(const cv::Mat &a_f, const cv::Mat &b_f, const bool conjB = true) const;
+
+    Model model;			/// learnt model
+    cv::Mat y_f;			/// desired output
+
+    cv::Mat hann_window_target;
+    cv::Mat hann_window_detection;
+
+    cv::Rect tracked_target;	/// actual target
+    cv::Rect padded_detection;	/// padded area (due to Hann window damping, etc.)
+
+    bool initialized_model;
+    FLOAT_TYPE relative_sigma;
+
+    FLOAT_TYPE confidence;
+
+    Parameters params;
+
+    Output output;
+};
+
+}
