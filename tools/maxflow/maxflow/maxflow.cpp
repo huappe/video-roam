@@ -277,3 +277,208 @@ template <typename captype, typename tcaptype, typename flowtype>
 		a = i -> parent;
 		if (a == TERMINAL) break;
 		a -> r_cap += bottleneck;
+		a -> sister -> r_cap -= bottleneck;
+		if (!a->sister->r_cap)
+		{
+			set_orphan_front(i); // add i to the beginning of the adoption list
+		}
+	}
+	i -> tr_cap -= bottleneck;
+	if (!i->tr_cap)
+	{
+		set_orphan_front(i); // add i to the beginning of the adoption list
+	}
+	/* 2b - the sink tree */
+	for (i=middle_arc->head; ; i=a->head)
+	{
+		a = i -> parent;
+		if (a == TERMINAL) break;
+		a -> sister -> r_cap += bottleneck;
+		a -> r_cap -= bottleneck;
+		if (!a->r_cap)
+		{
+			set_orphan_front(i); // add i to the beginning of the adoption list
+		}
+	}
+	i -> tr_cap += bottleneck;
+	if (!i->tr_cap)
+	{
+		set_orphan_front(i); // add i to the beginning of the adoption list
+	}
+
+
+	flow += bottleneck;
+}
+
+/***********************************************************************/
+
+template <typename captype, typename tcaptype, typename flowtype> 
+	void Graph<captype,tcaptype,flowtype>::process_source_orphan(node *i)
+{
+	node *j;
+	arc *a0, *a0_min = NULL, *a;
+	int d, d_min = INFINITE_D;
+
+	/* trying to find a new parent */
+	for (a0=i->first; a0; a0=a0->next)
+	if (a0->sister->r_cap)
+	{
+		j = a0 -> head;
+		if (!j->is_sink && (a=j->parent))
+		{
+			/* checking the origin of j */
+			d = 0;
+			while ( 1 )
+			{
+				if (j->TS == TIME)
+				{
+					d += j -> DIST;
+					break;
+				}
+				a = j -> parent;
+				d ++;
+				if (a==TERMINAL)
+				{
+					j -> TS = TIME;
+					j -> DIST = 1;
+					break;
+				}
+				if (a==ORPHAN) { d = INFINITE_D; break; }
+				j = a -> head;
+			}
+			if (d<INFINITE_D) /* j originates from the source - done */
+			{
+				if (d<d_min)
+				{
+					a0_min = a0;
+					d_min = d;
+				}
+				/* set marks along the path */
+				for (j=a0->head; j->TS!=TIME; j=j->parent->head)
+				{
+					j -> TS = TIME;
+					j -> DIST = d --;
+				}
+			}
+		}
+	}
+
+	if (i->parent = a0_min)
+	{
+		i -> TS = TIME;
+		i -> DIST = d_min + 1;
+	}
+	else
+	{
+		/* no parent is found */
+		add_to_changed_list(i);
+
+		/* process neighbors */
+		for (a0=i->first; a0; a0=a0->next)
+		{
+			j = a0 -> head;
+			if (!j->is_sink && (a=j->parent))
+			{
+				if (a0->sister->r_cap) set_active(j);
+				if (a!=TERMINAL && a!=ORPHAN && a->head==i)
+				{
+					set_orphan_rear(j); // add j to the end of the adoption list
+				}
+			}
+		}
+	}
+}
+
+template <typename captype, typename tcaptype, typename flowtype> 
+	void Graph<captype,tcaptype,flowtype>::process_sink_orphan(node *i)
+{
+	node *j;
+	arc *a0, *a0_min = NULL, *a;
+	int d, d_min = INFINITE_D;
+
+	/* trying to find a new parent */
+	for (a0=i->first; a0; a0=a0->next)
+	if (a0->r_cap)
+	{
+		j = a0 -> head;
+		if (j->is_sink && (a=j->parent))
+		{
+			/* checking the origin of j */
+			d = 0;
+			while ( 1 )
+			{
+				if (j->TS == TIME)
+				{
+					d += j -> DIST;
+					break;
+				}
+				a = j -> parent;
+				d ++;
+				if (a==TERMINAL)
+				{
+					j -> TS = TIME;
+					j -> DIST = 1;
+					break;
+				}
+				if (a==ORPHAN) { d = INFINITE_D; break; }
+				j = a -> head;
+			}
+			if (d<INFINITE_D) /* j originates from the sink - done */
+			{
+				if (d<d_min)
+				{
+					a0_min = a0;
+					d_min = d;
+				}
+				/* set marks along the path */
+				for (j=a0->head; j->TS!=TIME; j=j->parent->head)
+				{
+					j -> TS = TIME;
+					j -> DIST = d --;
+				}
+			}
+		}
+	}
+
+	if (i->parent = a0_min)
+	{
+		i -> TS = TIME;
+		i -> DIST = d_min + 1;
+	}
+	else
+	{
+		/* no parent is found */
+		add_to_changed_list(i);
+
+		/* process neighbors */
+		for (a0=i->first; a0; a0=a0->next)
+		{
+			j = a0 -> head;
+			if (j->is_sink && (a=j->parent))
+			{
+				if (a0->r_cap) set_active(j);
+				if (a!=TERMINAL && a!=ORPHAN && a->head==i)
+				{
+					set_orphan_rear(j); // add j to the end of the adoption list
+				}
+			}
+		}
+	}
+}
+
+/***********************************************************************/
+
+template <typename captype, typename tcaptype, typename flowtype> 
+	flowtype Graph<captype,tcaptype,flowtype>::maxflow(bool reuse_trees, Block<node_id>* _changed_list)
+{
+	node *i, *j, *current_node = NULL;
+	arc *a;
+	nodeptr *np, *np_next;
+
+    if (!nodeptr_block)
+	{
+		nodeptr_block = new DBlock<nodeptr>(NODEPTR_BLOCK_SIZE, error_function);
+	}
+
+	changed_list = _changed_list;
+	if (maxflow_iteration == 0 && reuse_trees) { if (error_function
