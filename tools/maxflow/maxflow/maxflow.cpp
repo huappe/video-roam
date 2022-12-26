@@ -675,4 +675,10 @@ template <typename captype, typename tcaptype, typename flowtype>
 		// test marking invariants
 		if (i->parent && i->parent!=ORPHAN && i->parent!=TERMINAL)
 		{
-			assert(i->T
+			assert(i->TS <= i->parent->head->TS);
+			if (i->TS == i->parent->head->TS) assert(i->DIST > i->parent->head->DIST);
+		}
+	}
+}
+
+#include "instances.inc"
