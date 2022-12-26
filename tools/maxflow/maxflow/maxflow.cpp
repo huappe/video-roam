@@ -481,4 +481,198 @@ template <typename captype, typename tcaptype, typename flowtype>
 	}
 
 	changed_list = _changed_list;
-	if (maxflow_iteration == 0 && reuse_trees) { if (error_function
+	if (maxflow_iteration == 0 && reuse_trees) { if (error_function) (*error_function)("reuse_trees cannot be used in the first call to maxflow()!"); exit(1); }
+	if (changed_list && !reuse_trees) { if (error_function) (*error_function)("changed_list cannot be used without reuse_trees!"); exit(1); }
+
+	if (reuse_trees) maxflow_reuse_trees_init();
+	else             maxflow_init();
+
+	// main loop
+	while ( 1 )
+	{
+		// test_consistency(current_node);
+
+		if ((i=current_node))
+		{
+			i -> next = NULL; /* remove active flag */
+			if (!i->parent) i = NULL;
+		}
+		if (!i)
+		{
+			if (!(i = next_active())) break;
+		}
+
+		/* growth */
+		if (!i->is_sink)
+		{
+			/* grow source tree */
+			for (a=i->first; a; a=a->next)
+			if (a->r_cap)
+			{
+				j = a -> head;
+				if (!j->parent)
+				{
+					j -> is_sink = 0;
+					j -> parent = a -> sister;
+					j -> TS = i -> TS;
+					j -> DIST = i -> DIST + 1;
+					set_active(j);
+					add_to_changed_list(j);
+				}
+				else if (j->is_sink) break;
+				else if (j->TS <= i->TS &&
+				         j->DIST > i->DIST)
+				{
+					/* heuristic - trying to make the distance from j to the source shorter */
+					j -> parent = a -> sister;
+					j -> TS = i -> TS;
+					j -> DIST = i -> DIST + 1;
+				}
+			}
+		}
+		else
+		{
+			/* grow sink tree */
+			for (a=i->first; a; a=a->next)
+			if (a->sister->r_cap)
+			{
+				j = a -> head;
+				if (!j->parent)
+				{
+					j -> is_sink = 1;
+					j -> parent = a -> sister;
+					j -> TS = i -> TS;
+					j -> DIST = i -> DIST + 1;
+					set_active(j);
+					add_to_changed_list(j);
+				}
+				else if (!j->is_sink) { a = a -> sister; break; }
+				else if (j->TS <= i->TS &&
+				         j->DIST > i->DIST)
+				{
+					/* heuristic - trying to make the distance from j to the sink shorter */
+					j -> parent = a -> sister;
+					j -> TS = i -> TS;
+					j -> DIST = i -> DIST + 1;
+				}
+			}
+		}
+
+		TIME ++;
+
+		if (a)
+		{
+			i -> next = i; /* set active flag */
+			current_node = i;
+
+			/* augmentation */
+			augment(a);
+			/* augmentation end */
+
+			/* adoption */
+			while ((np=orphan_first))
+			{
+				np_next = np -> next;
+				np -> next = NULL;
+
+				while ((np=orphan_first))
+				{
+					orphan_first = np -> next;
+					i = np -> ptr;
+					nodeptr_block -> Delete(np);
+					if (!orphan_first) orphan_last = NULL;
+					if (i->is_sink) process_sink_orphan(i);
+					else            process_source_orphan(i);
+				}
+
+				orphan_first = np_next;
+			}
+			/* adoption end */
+		}
+		else current_node = NULL;
+	}
+	// test_consistency();
+
+	if (!reuse_trees || (maxflow_iteration % 64) == 0)
+	{
+		delete nodeptr_block; 
+		nodeptr_block = NULL; 
+	}
+
+	maxflow_iteration ++;
+	return flow;
+}
+
+/***********************************************************************/
+
+
+template <typename captype, typename tcaptype, typename flowtype> 
+	void Graph<captype,tcaptype,flowtype>::test_consistency(node* current_node)
+{
+	node *i;
+	arc *a;
+	int r;
+	int num1 = 0, num2 = 0;
+
+	// test whether all nodes i with i->next!=NULL are indeed in the queue
+	for (i=nodes; i<node_last; i++)
+	{
+		if (i->next || i==current_node) num1 ++;
+	}
+	for (r=0; r<3; r++)
+	{
+		i = (r == 2) ? current_node : queue_first[r];
+		if (i)
+		for ( ; ; i=i->next)
+		{
+			num2 ++;
+			if (i->next == i)
+			{
+				if (r<2) assert(i == queue_last[r]);
+				else     assert(i == current_node);
+				break;
+			}
+		}
+	}
+	assert(num1 == num2);
+
+	for (i=nodes; i<node_last; i++)
+	{
+		// test whether all edges in seach trees are non-saturated
+		if (i->parent == NULL) {}
+		else if (i->parent == ORPHAN) {}
+		else if (i->parent == TERMINAL)
+		{
+			if (!i->is_sink) assert(i->tr_cap > 0);
+			else             assert(i->tr_cap < 0);
+		}
+		else
+		{
+			if (!i->is_sink) assert (i->parent->sister->r_cap > 0);
+			else             assert (i->parent->r_cap > 0);
+		}
+		// test whether passive nodes in search trees have neighbors in
+		// a different tree through non-saturated edges
+		if (i->parent && !i->next)
+		{
+			if (!i->is_sink)
+			{
+				assert(i->tr_cap >= 0);
+				for (a=i->first; a; a=a->next)
+				{
+					if (a->r_cap > 0) assert(a->head->parent && !a->head->is_sink);
+				}
+			}
+			else
+			{
+				assert(i->tr_cap <= 0);
+				for (a=i->first; a; a=a->next)
+				{
+					if (a->sister->r_cap > 0) assert(a->head->parent && a->head->is_sink);
+				}
+			}
+		}
+		// test marking invariants
+		if (i->parent && i->parent!=ORPHAN && i->parent!=TERMINAL)
+		{
+			assert(i->T
