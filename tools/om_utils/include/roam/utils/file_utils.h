@@ -77,4 +77,9 @@ namespace ROAM
 
 		/// Load vector from binary format
 		/// @param[in] filename Fullpath to a file
-		/// @param[out] vector Vector of values of typ
+		/// @param[out] vector Vector of values of type double
+		static void LoadVectorBinary(std::vector<double> &vector, const std::string &filename);
+	};
+}
+
+
