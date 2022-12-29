@@ -43,4 +43,122 @@ namespace ROAM
 		}
 
 		// -----------------------------------------------------------------------------------
-		v
+		void Accumulate(const std::vector<int> &gt,
+						const Eigen::MatrixXd &k_solutions,
+						const size_t n_labels,
+						const std::vector<double> &weights = std::vector<double>())
+		// -----------------------------------------------------------------------------------
+		{
+			//assert(k_solutions.rows() == m_K);
+			assert(static_cast<size_t>(k_solutions.rows()) <= m_K);
+			Eigen::MatrixXd tmp_solutions = k_solutions;
+			if(static_cast<size_t>(k_solutions.rows()) < m_K)
+			{
+				tmp_solutions = Eigen::MatrixXd(m_K, gt.size() * n_labels);
+
+				for(auto i = 0; i < k_solutions.rows(); ++i)
+					tmp_solutions.row(i) = k_solutions.row(i);
+
+				// do we need this?
+				for(size_t i = k_solutions.rows(); i < m_K; ++i)
+					tmp_solutions.row(i) = k_solutions.row(k_solutions.rows() - 1);
+			}
+
+			// pre-compute confusion matrices
+			const std::vector<ConfusionMatrix> matrices = confusionMatrices(gt, tmp_solutions, n_labels, weights);
+
+			// store the data
+			std::vector<double> c_oracle_scores(m_K);
+			std::vector<ConfusionMatrix> c_oracle_matrices(m_K, ConfusionMatrix(n_labels));
+
+			// compute oracle scores for 1, 2, ... K solutions
+			#pragma omp parallel for
+			for(auto i = 0; i < m_K; ++i)
+			{
+				// use oracle for the first 1, ... i matrices
+				const std::vector<ConfusionMatrix> restricted(matrices.begin(), matrices.begin() + i + 1);
+
+				const size_t best_solution = oracle(restricted);
+				const ConfusionMatrix &oracle_matrix = matrices[best_solution];
+
+				c_oracle_scores[i] = oracleScore(oracle_matrix);
+				c_oracle_matrices[i] = oracle_matrix;
+			}
+
+			m_oracle_scores.push_back(c_oracle_scores);
+			m_oracle_matrices.push_back(c_oracle_matrices);
+		}
+
+		// -----------------------------------------------------------------------------------
+		double GlobalScore() const
+		// -----------------------------------------------------------------------------------
+		{
+			return KthGlobalScore(m_K - 1);
+		}
+
+		// -----------------------------------------------------------------------------------
+		std::vector<double> GlobalScores() const
+		// -----------------------------------------------------------------------------------
+		{
+			std::vector<double> scores(m_K);
+
+			#pragma omp parallel for
+			for(auto i = 0; i < m_K; ++i)
+				scores[i] = KthGlobalScore(i);
+
+			return scores;
+		}
+
+		// -----------------------------------------------------------------------------------
+		double KthGlobalScore(const size_t k) const
+		// -----------------------------------------------------------------------------------
+		{
+			assert(k < m_K);
+
+			const std::vector<double> scores = KthOraclePerImageScores(k);
+			const double accumulate = std::accumulate(scores.begin(), scores.end(), 0.0);
+			const double score = accumulate / static_cast<double>(scores.size());
+
+			return score;
+		}
+
+		// -----------------------------------------------------------------------------------
+		size_t NAccumulatedImages() const
+		// -----------------------------------------------------------------------------------
+		{
+			return m_oracle_scores.size();
+		}
+
+		// -----------------------------------------------------------------------------------
+		std::vector<double> PerImageScores(const size_t i) const
+		// -----------------------------------------------------------------------------------
+		{
+			assert(i < m_oracle_scores.size());
+			return m_oracle_scores[i];
+		}
+
+		// -----------------------------------------------------------------------------------
+		std::vector<ConfusionMatrix> PerImageConfusionMatrices(const size_t i) const
+		// -----------------------------------------------------------------------------------
+		{
+			assert(i < m_oracle_matrices.size());
+			return m_oracle_matrices[i];
+		}
+
+		// -----------------------------------------------------------------------------------
+		std::vector<double> KthOraclePerImageScores(const size_t k) const
+		// -----------------------------------------------------------------------------------
+		{
+			const size_t nImages = NAccumulatedImages();
+
+			std::vector<double> res(nImages);
+			if(nImages < 1)
+				return res;
+
+			assert(k < m_oracle_scores[0].size());
+
+			#pragma omp parallel for
+			for(auto i = 0; i < nImages; ++i)
+				res[i] = m_oracle_scores[i][k];
+
+			return res
