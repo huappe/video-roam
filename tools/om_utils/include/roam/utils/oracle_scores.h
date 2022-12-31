@@ -161,4 +161,125 @@ namespace ROAM
 			for(auto i = 0; i < nImages; ++i)
 				res[i] = m_oracle_scores[i][k];
 
-			return res
+			return res;
+		}
+
+		// -----------------------------------------------------------------------------------
+		std::vector<ConfusionMatrix> KthOraclePerImageConfusionMatrices(const size_t k) const
+		// -----------------------------------------------------------------------------------
+		{
+			const size_t nImages = NAccumulatedImages();
+
+			std::vector<ConfusionMatrix> res(nImages, ConfusionMatrix(0));
+			if(nImages < 1)
+				return res;
+
+			assert(k < m_oracle_matrices[0].size());
+
+			#pragma omp parallel for
+			for(auto i = 0; i < nImages; ++i)
+				res[i] = m_oracle_matrices[i][k];
+
+			return res;
+		}
+
+		// -----------------------------------------------------------------------------------
+		void Print(std::ostream &out = std::cout, const size_t decimal_prec = 4) const
+		// -----------------------------------------------------------------------------------
+		{
+			// -----------------------------------------------------------------------------------
+			// set precision
+			out << std::setprecision(decimal_prec) << std::fixed;
+
+			// -----------------------------------------------------------------------------------
+			// cumulative scores
+			const std::vector<double> scores = GlobalScores();
+
+			out << "Cumulative scores (k = 1, k = 2, ..., k = K)" << std::endl;
+			out << "k = ";
+			for(size_t i = 0; i < m_K; ++i)
+				out << "\t" << i;
+
+			out << std::endl << "score: ";
+			for(size_t i = 0; i < m_K; ++i)
+				out << "\t" << scores[i];
+			out << std::endl << std::endl;
+
+			// -----------------------------------------------------------------------------------
+			// score 
+			out << "Oracle Global Score for (K = " << m_K << "): "
+				<< GlobalScore() << std::scientific << std::endl;
+		}
+
+		// -----------------------------------------------------------------------------------
+		friend std::ostream& operator<<(std::ostream& stream, const OracleScores& scores)
+		// -----------------------------------------------------------------------------------
+		{
+			scores.Print(stream);
+			return stream;
+		}
+
+	protected:
+		// TODO: can be overloaded for any other performance measure
+		// -----------------------------------------------------------------------------------
+		virtual double oracleScore(const ConfusionMatrix &confusion_matrix) const
+		// -----------------------------------------------------------------------------------
+		{
+			return confusion_matrix.Accuracy();
+		}
+
+		// -----------------------------------------------------------------------------------
+		size_t oracle(const std::vector<ConfusionMatrix> &matrices) const
+		// -----------------------------------------------------------------------------------
+		{
+			size_t best_id = 0;
+			double best_score = 0.0;
+
+			for(size_t i = 0; i < matrices.size(); ++i)
+			{
+				const ConfusionMatrix &cmat = matrices[i];
+				const double score = oracleScore(cmat);
+				if(best_score < score)
+				{
+					best_score = score;
+					best_id = i;
+				}
+			}
+
+			return best_id;
+		}
+
+		// -----------------------------------------------------------------------------------
+		std::vector<ConfusionMatrix> confusionMatrices(const std::vector<int> &gt,
+													   const Eigen::MatrixXd &k_solutions,
+													   const size_t n_labels,
+													   const std::vector<double> &weights = std::vector<double>()) const
+		// -----------------------------------------------------------------------------------
+		{
+			assert(k_solutions.rows() == m_K);
+
+			std::vector<ConfusionMatrix> matrices(m_K, ConfusionMatrix(n_labels));
+
+			#pragma omp parallel for
+			for(auto i = 0; i < m_K; ++i)
+			{
+				const Eigen::VectorXd &solution = k_solutions.row(i);
+				const std::vector<int> predictions = VisualizationUtils::indicators2MAP<int>(solution, n_labels);
+				assert(gt.size() == predictions.size());
+
+				ConfusionMatrix cmat(n_labels);
+				cmat.Accumulate(gt, predictions, weights);
+
+				matrices[i] = cmat;
+			}
+
+			return matrices;
+		}
+
+		std::vector<std::vector<double> > m_oracle_scores;
+		std::vector<std::vector<ConfusionMatrix> > m_oracle_matrices;
+
+		const size_t m_K;
+		//const size_t m_nLabels;
+	};
+}
