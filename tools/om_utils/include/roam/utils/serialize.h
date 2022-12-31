@@ -110,4 +110,16 @@ namespace ROAM
 		/// Prints section separator
 		/// @param emitter Yaml stream
 		/// @param[in] name Text to be printed
-		// --------------------------------------------
+		// -----------------------------------------------------------------------------------
+		void printSectionHeader(YAML::Emitter &emitter, const std::string &name) const
+		// -----------------------------------------------------------------------------------
+		{
+			emitter << YAML::Comment("---------------------------------------------------------------------");
+			emitter << YAML::Newline;
+			emitter << YAML::Comment(name);
+			emitter << YAML::Newline;
+			emitter << YAML::Comment("---------------------------------------------------------------------");
+			emitter << YAML::Newline;
+		}
+	};
+}
